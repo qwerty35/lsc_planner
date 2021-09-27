@@ -48,7 +48,7 @@ See the comments in the launch/simulation.launch and missions/readme.txt file fo
 
 Note: If you want to generate the mission file automatically, then use matlab script in matlab/mission_generator
 
-## 5. Acknowledgment
+## 4. Acknowledgment
 This work is implemented based on the following packages.
 
 (1) RVO2, RVO2-3D (https://gamma.cs.unc.edu/RVO2/downloads/)
@@ -59,7 +59,7 @@ This work is implemented based on the following packages.
 
 (4) openGJK (https://www.mattiamontanari.com/opengjk/)
 
-## 6. Notes
+## 5. Notes
 (1) Numerical issue: This code may cause infeasible optimization problem due to the numerical error of dynamicEDT3D library.
 If you want to avoid infeasible constraints, then use alternative method in the function 'TrajPlanner::generateFeasibleSFC()' in traj_planner.cpp
 However, it is prone to deadlock and is too conservative.
