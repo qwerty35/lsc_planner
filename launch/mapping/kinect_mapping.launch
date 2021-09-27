@@ -1,0 +1,83 @@
+<!-- Octomap Mapping using kinect -->
+<!-- Terminal1 -->
+<!-- roslaunch openni_launch openni.launch depth_registration:=true -->
+<!-- Terminal2 -->
+<!-- roslaunch lsc_planner kinect_mapping.launch -->
+<!-- Terminal3 -->
+<!-- export ROS_NAMESPACE=rtabmap -->
+<!-- rosrun rtabmap_ros rtabmapviz _frame_id:=base_link -->
+<!-- (After mapping, pause and File/Export 3D clouds) -->
+<!-- (Then, roslaunch lsc_planner pcd2octomap.launch) -->
+
+<launch>
+  <!-- Parameters -->
+  <arg name="rviz" default="true" />
+  <arg name="world_resolution" default="0.1" />
+  <arg name="frame_id" default="world" />
+
+  <!-- Nodes -->
+  <!-- Kinect cloud to laser scan -->
+    <node pkg="depthimage_to_laserscan" type="depthimage_to_laserscan" name="depthimage_to_laserscan">
+      <remap from="image"       to="/camera/depth_registered/image_raw"/>
+      <remap from="camera_info" to="/camera/depth_registered/camera_info"/>
+      <remap from="scan"        to="/kinect_scan"/>
+      <param name="range_max" type="double" value="4"/>
+    </node>
+
+  <!-- SLAM -->
+  <group ns="rtabmap">
+    <node name="rtabmap" pkg="rtabmap_ros" type="rtabmap" output="screen" args="--delete_db_on_start">
+          <param name="frame_id" type="string" value="base_link"/>
+
+          <param name="subscribe_depth" type="bool" value="true"/>
+          <param name="subscribe_scan" type="bool" value="true"/>
+
+          <remap from="odom" to="/optitrack/kinect_pose/odom"/>
+          <remap from="scan" to="/kinect_scan"/>
+
+          <remap from="rgb/image"       to="/camera/rgb/image_rect_color"/>
+          <remap from="depth/image"     to="/camera/depth_registered/image_raw"/>
+          <remap from="rgb/camera_info" to="/camera/rgb/camera_info"/>
+
+          <param name="queue_size" type="int" value="10"/>
+
+          <!-- RTAB-Map's parameters -->
+          <param name="RGBD/ProximityBySpace"     type="string" value="false"/>
+          <param name="RGBD/AngularUpdate"        type="string" value="0.01"/>
+          <param name="RGBD/LinearUpdate"         type="string" value="0.01"/>
+          <param name="RGBD/OptimizeFromGraphEnd" type="string" value="false"/>
+          <param name="RGBD/OptimizeMaxError"     type="double" value="0.001"  />
+          <param name="Reg/Force3DoF"             type="string" value="true"/>
+          <param name="Vis/MinInliers"            type="string" value="12"/>
+    </node>
+  </group>
+
+  <node pkg="tf" type="static_transform_publisher" name="kinect_broadcaster1" args="0 0 0 0 0 0 1 kinect_pose base_link 100" />
+  <node pkg="tf" type="static_transform_publisher" name="kinect_broadcaster2" args="0 0 0 0 0 0 1 kinect_pose camera_link 100" />
+
+  <node pkg="optitrack_bridge" type="optitrack_bridge_node" name="optitrack_bridge_node" output="screen">
+    <param name="frame_id" value="$(arg frame_id)" type="str" />
+    <param name="message_type" value="odomtf" type="str" /> <!-- pose, odom, tf, odomtf-->
+    <param name="show_latency" value="false" type="bool" />
+    <param name="publish_labeled_marker_pose_array" value="false" type="bool" /> <!-- need to check labeled marker in motive -->
+    <param name="publish_unlabeled_marker_pose_array" value="false" type="bool" /> <!-- need to check unlabeled marker in motive -->
+  </node>
+
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find lsc_planner)/launch/rviz_config/kinect_mapping.rviz" if="$(arg rviz)" />
+
+  <!--node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
+    <remap from="cloud_in" to="zed_node/point_cloud/cloud_registered"/>
+    <param name="resolution"                 value="$(arg world_resolution)" />
+    <param name="frame_id"                   value="$(arg frame_id)" type="string"/>
+    <param name="sensor_model/max_range"     value="3.0" />
+    <param name="height_map"                 value="true"/>
+    <param name="filter_ground"              value="false"/>
+    <param name="color/r"                    value="0.2" />
+    <param name="color/g"                    value="0.2" />
+    <param name="color/b"                    value="0.2" />
+    <param name="color/a"                    value="0.5" />
+    <param name="pointcloud_min_z"           value="0.1" />
+    <param name="pointcloud_max_z"           value="1.1" />
+  </node-->
+</launch>

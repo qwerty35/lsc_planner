@@ -1,0 +1,30 @@
+<launch>
+  <arg name="rosbag_path" default="$(find lsc_planner)/log/example2_lsc.bag" />
+  <arg name="rviz" default="false"/>
+  <arg name="agent_id" default="0" />
+
+  <!-- Map -->
+  <arg name="use_octomap" default="false"/>
+  <arg name="world_frame_id" default="world"/>
+  <arg name="world_file_name" default="maze12.bt"/>
+  <arg name="world_resolution" default="0.1"/>
+
+  <node pkg="lsc_planner" type="multi_sync_debugger_node" name="multi_sync_debugger_node" output="screen">
+    <param name="rosbag_path" value="$(arg rosbag_path)" />
+    <param name="agent_id" value="$(arg agent_id)" />
+  </node>
+
+  <node pkg="rviz" type="rviz" name="rviz" args="-d $(find lsc_planner)/launch/rviz_config/debugger.rviz" if="$(arg rviz)" />
+
+  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server"
+        args="$(find lsc_planner)/world/$(arg world_file_name)" if="$(arg use_octomap)">
+    <param name="resolution"                 value="$(arg world_resolution)" />
+    <param name="frame_id"                   value="$(arg world_frame_id)" type="string"/>
+    <param name="sensor_model/max_range"     value="5.0" />
+    <param name="height_map"                 value="false"/>
+    <param name="color/r"                    value="0.2" />
+    <param name="color/g"                    value="0.2" />
+    <param name="color/b"                    value="0.2" />
+    <param name="color/a"                    value="0.2" />
+  </node>
+</launch>

@@ -1,0 +1,117 @@
+<!-- LSC planner -->
+
+<launch>
+<!-- Parameters -->
+  <!-- Mission -->
+  <arg name="mission" default="multi_square16.json" /> <!-- mission file, see lsc_planner/missions/readme.txt for more details -->
+  <arg name="patrol" default="false"/> <!-- Change the mission to patrol between start and goal points -->
+
+  <!-- Map -->
+  <arg name="use_octomap" default="true"/> <!-- Use octomap to set obstacle environment, octomap must be stored in lsc_planner/world  -->
+  <arg name="world_frame_id" default="world"/> <!--  -->
+  <arg name="world_file_name" default="simple_forest.bt"/> <!-- Octomap file name, it must be bt file -->
+  <arg name="world_resolution" default="0.1"/> <!-- Octomap resolution -->
+
+  <!-- Visualization   -->
+  <arg name="rviz" default="true" /> <!-- See the planning result in the rviz -->
+  <arg name="log" default="false" /> <!-- See the CPLEX optimization process in the terminal (Recommend to be false) -->
+
+  <!-- Save result -->
+  <arg name="save_result_csv" default="true" /> <!-- Save the planning result in lsc_planner/log-->
+
+  <!-- Replay -->
+  <!-- If you set save_result_csv to true, then result file will be automatically generated in lsc_planner/log -->
+  <!-- You can use this file to replay the planning result in the rviz -->
+  <arg name="replay" default="false" /> <!-- See the planning result in the rviz, replay file must be stored in lsc_planner/log-->
+  <arg name="replay_file_name" default="result_1632718261.222373_LSC_16agents.csv" /> <!-- Replay file name -->
+
+<!-- Nodes -->
+  <node pkg="lsc_planner" type="multi_sync_simulator_node" name="multi_sync_simulator_node" output="screen">
+    <param name="mission" value="$(arg mission)" />
+    <param name="log" value="$(arg log)" />
+
+    <!-- World -->
+    <param name="world/frame_id" value="$(arg world_frame_id)" />
+    <param name="world/dimension" value="3" /> <!-- 2: 2D simulation, 3: 3D simulation -->
+    <param name="world/use_octomap" value="$(arg use_octomap)" />
+    <param name="world/file_name" value="$(arg world_file_name)" />
+    <param name="world/resolution" value="$(arg world_resolution)" />
+    <param name="world/z_2d" value="0.6" /> <!-- Z position of the agents when world/dimension is 2 -->
+
+    <!-- Multisim setting -->
+    <param name="multisim/planning_rate" value="-1"/> <!-- Delay between iteration, if planning_rate is -1, then no delay -->
+    <param name="multisim/qn" value="2" /> <!-- The number of agents when the agents is empty in the mission file -->
+    <param name="multisim/time_step" value="0.2" /> <!-- Replanning period, if you use LSC planner then it must be equal to traj/dt -->
+    <param name="multisim/patrol" value="$(arg patrol)"/>
+    <param name="multisim/max_noise" value="0.02" /> <!-- If it is larger than 0, then it adds some noise to start and goal point -->
+    <param name="multisim/max_planner_iteration" value="1000" /> <!-- Maximum iteration of the planner -->
+    <param name="multisim/save_result" value="$(arg save_result_csv)" />
+    <param name="multisim/replay" value="$(arg replay)" />
+    <param name="multisim/replay_file_name" value="$(arg replay_file_name)" />
+    <param name="multisim/experiment" value="$(arg experiment)" />
+    <param name="multisim/record_time_step" value="0.1" /> <!-- Record time step -->
+    <param name="multisim/reset_threshold" value="0.15" /> <!-- If the position error is larger than this, then use reciprocal rsfc -->
+
+    <!-- Planner mode -->
+    <param name="mode/planner" value="lsc" /> <!-- lsc: LSC planner, bvc: Buffered Voronoi Cell planner -->
+    <param name="mode/goal" value="prior_based" /> <!-- right_hand: use right hand rule, prior_based: use priority-based goal planning -->
+
+    <!-- Trajectory representation -->
+    <param name="traj/dt" value="0.2" /> <!-- Segment time, if you use LSC planner then it must be equal to multisim/time_step -->
+    <param name="traj/horizon" value="1.0" /> <!-- Planning horizon, M = horizon / dt -->
+    <param name="traj/n" value="5" /> <!-- Degree of polynomial, only 5 is available now -->
+    <param name="traj/phi" value="3" /> <!-- 3: Minimize Jerk, only 3 is available now -->
+    <param name="traj/phi_n" value="1" /> <!-- 1: Minimize Jerk, only 1 is available now -->
+
+    <!-- Trajectory optimization -->
+    <param name="opt/control_input_weight" value="0.01" /> <!-- Weight coefficient of derivatives of trajectory -->
+    <param name="opt/terminal_weight" value="1" /> <!-- Weight coefficient of error to goal -->
+    <param name="opt/slack_collision_weight" value="100000" /> <!-- Weight coefficient of slack variable -->
+    <param name="opt/N_constraint_segments" value="-1" />
+
+    <!-- Deadlock -->
+    <param name="deadlock/velocity_threshold" value="0.1" /> <!-- if the velocity of the agent is lower than this, then the agent judge that deadlock occurred -->
+    <param name="deadlock/seq_threshold" value="5" />
+
+    <!-- Iterative optimization -->
+    <param name="iteropt/iteration" value="1" />
+    <param name="iteropt/use_prev_solution" value="false" />
+    <param name="iteropt/max_planning_time" value="100000" />
+
+    <!-- ORCA -->
+    <param name="orca/horizon" value="2.0" />
+    <param name="ocra/pref_velocity_ratio" value="1.0" />
+    <param name="orca/inflation_ratio" value="1.0" />
+
+    <!-- Grid-based planner   -->
+    <param name="grid/resolution" value="0.25" /> <!-- Resolution of the grid, if it is too big, then it can not find path to the goal, if it is too small then computation time will be increased -->
+    <param name="grid/margin" value="0.1" /> <!-- For each grid point, grid_point is not occupied if dist_to_obs > agent_radius + grid_margin -->
+
+    <!-- Goal -->
+    <param name="plan/goal_threshold" value="0.1" /> <!-- If distance between the agent and goal point is smaller than this, then the agent judges that the mission is complete -->
+    <param name="plan/goal_radius" value="2.0" />
+    <param name="plan/priority_dist_threshold" value="0.4" />
+
+    <!-- Debug -->
+    <param name="debug/stop_seq" value="-1" />
+  </node>
+
+  <node pkg="lsc_planner" type="cmd_publisher_node" name="cmd_publisher_node" if="$(arg experiment)">
+    <param name="mission" value="$(arg mission)" />
+  </node>
+
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find lsc_planner)/launch/rviz_config/multi_config.rviz" if="$(arg rviz)" />
+
+  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server"
+        args="$(find lsc_planner)/world/$(arg world_file_name)" if="$(arg use_octomap)">
+    <param name="resolution"                 value="$(arg world_resolution)" />
+    <param name="frame_id"                   value="$(arg world_frame_id)" type="string"/>
+    <param name="sensor_model/max_range"     value="5.0" />
+    <param name="height_map"                 value="false"/>
+    <param name="color/r"                    value="0.2" />
+    <param name="color/g"                    value="0.2" />
+    <param name="color/b"                    value="0.2" />
+    <param name="color/a"                    value="0.2" />
+  </node>
+</launch>

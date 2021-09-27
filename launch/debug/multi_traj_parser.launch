@@ -1,0 +1,42 @@
+<!-- LSC planner -->
+
+<launch>
+<!-- Parameters -->
+  <!-- Mission -->
+  <arg name="mission" default="multi_forest_5agents.json" />
+  <arg name="experiment" default="false" />
+  <arg name="patrol" default="false"/>
+
+  <!-- Map -->
+  <arg name="use_octomap" default="false"/>
+  <arg name="world_frame_id" default="world"/>
+  <arg name="world_file_name" default="maze.bt"/>
+  <arg name="world_resolution" default="0.1"/>
+
+  <!-- Visualization   -->
+  <arg name="rviz" default="false" />
+  <arg name="log" default="false" />
+
+  <!-- Save result -->
+  <arg name="save_result_csv" default="true" />
+  <arg name="save_rviz_msg_rosbag" default="false" />
+  <arg name="save_raw_msg_rosbag" default="false" />
+
+  <!-- Replay -->
+  <arg name="replay" default="true" />
+  <arg name="replay_file_name" default="result_1629177849.807030_feasible_rsfc_10agents.csv" />
+
+<!-- Nodes -->
+  <node pkg="lsc_planner" type="multi_traj_parser_node" name="multi_traj_parser_node" output="screen">
+    <param name="mission" value="$(arg mission)" />
+    <param name="log" value="$(arg log)" />
+
+    <!-- World -->
+    <param name="world/frame_id" value="$(arg world_frame_id)" />
+    <param name="world/dimension" value="3" />
+    <param name="world/use_octomap" value="$(arg use_octomap)" />
+    <param name="world/resolution" value="$(arg world_resolution)" />
+    <param name="world/z_2d" value="0.7" />
+  </node>
+
+</launch>

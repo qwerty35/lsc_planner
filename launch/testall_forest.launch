@@ -1,0 +1,102 @@
+<!-- LSC planner -->
+
+<launch>
+<!-- Parameters -->
+  <!-- Mission -->
+  <arg name="mission" default="forest" />
+  <arg name="experiment" default="false" />
+  <arg name="patrol" default="false"/>
+
+  <!-- Map -->
+  <arg name="use_octomap" default="true"/>
+  <arg name="world_frame_id" default="world"/>
+  <arg name="world_file_name" default="forest"/>
+  <arg name="world_resolution" default="0.1"/>
+
+  <!-- Visualization   -->
+  <arg name="rviz" default="true" />
+  <arg name="log" default="false" />
+
+  <!-- Save result -->
+  <arg name="save_result_csv" default="true" />
+  <arg name="save_rviz_msg_rosbag" default="false" />
+  <arg name="save_raw_msg_rosbag" default="false" />
+
+  <!-- Replay -->
+  <arg name="replay" default="false" />
+  <arg name="replay_file_name" default="result_1625623608.735244_feasible_rsfc_64agents.csv" />
+
+<!-- Nodes -->
+  <node pkg="lsc_planner" type="multi_sync_simulator_node" name="multi_sync_simulator_node" output="screen">
+    <param name="mission" value="$(arg mission)" />
+    <param name="log" value="$(arg log)" />
+
+    <!-- World -->
+    <param name="world/frame_id" value="$(arg world_frame_id)" />
+    <param name="world/dimension" value="3" />
+    <param name="world/use_octomap" value="$(arg use_octomap)" />
+    <param name="world/file_name" value="$(arg world_file_name)" />
+    <param name="world/resolution" value="$(arg world_resolution)" />
+    <param name="world/z_2d" value="0.7" />
+
+    <!-- Multisim setting -->
+    <param name="multisim/planning_rate" value="-1"/>
+    <param name="multisim/qn" value="2" />
+    <param name="multisim/time_step" value="0.2" />
+    <param name="multisim/patrol" value="$(arg patrol)"/>
+    <param name="multisim/max_noise" value="0.0" />
+    <param name="multisim/max_planner_iteration" value="300" />
+    <param name="multisim/save_result" value="$(arg save_result_csv)" />
+    <param name="multisim/replay" value="$(arg replay)" />
+    <param name="multisim/replay_file_name" value="$(arg replay_file_name)" />
+    <param name="multisim/experiment" value="$(arg experiment)" />
+    <param name="multisim/record_time_step" value="0.1" />
+    <param name="multisim/reset_threshold" value="0.15" />
+
+    <!-- Planner mode -->
+    <param name="mode/planner" value="lsc" /> <!-- lsc, bvc, orca-->
+    <param name="mode/goal" value="prior_based" /> <!-- right_hand, prior_based-->
+
+    <!-- Trajectory representation -->
+    <param name="traj/dt" value="0.2" />
+    <param name="traj/horizon" value="1.0" />
+    <param name="traj/n" value="5" />
+    <param name="traj/phi" value="3" />
+    <param name="traj/phi_n" value="1" />
+
+    <!-- Trajectory optimization -->
+    <param name="opt/control_input_weight" value="0.01" />
+    <param name="opt/terminal_weight" value="1" />
+    <param name="opt/slack_collision_weight" value="100000" />
+    <param name="opt/N_constraint_segments" value="-1" />
+
+    <!-- Deadlock -->
+    <param name="deadlock/velocity_threshold" value="0.1" />
+    <param name="deadlock/seq_threshold" value="5" />
+
+    <!-- Filter -->
+    <param name="filter/sigma_y_sq" value="0.0036" />
+    <param name="filter/sigma_v_sq" value="0.01" />
+    <param name="filter/sigma_a_sq" value="1.0" />
+
+    <!-- ORCA -->
+    <param name="orca/horizon" value="2.0" />
+    <param name="ocra/pref_velocity_ratio" value="1.0" />
+    <param name="orca/inflation_ratio" value="1.0" />
+
+    <!-- Grid-based planner   -->
+    <param name="grid/resolution" value="0.3" />
+    <param name="grid/margin" value="0.2" />
+
+    <!-- Goal -->
+    <param name="plan/goal_threshold" value="0.1" />
+    <param name="plan/goal_radius" value="2.0" />
+    <param name="plan/priority_dist_threshold" value="0.4" />
+
+    <!-- Debug -->
+    <param name="debug/stop_seq" value="-1" />
+  </node>
+
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find lsc_planner)/launch/rviz_config/multi_config.rviz" if="$(arg rviz)" />
+</launch>

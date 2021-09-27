@@ -1,0 +1,40 @@
+<!-- Octomap Mapping using ZED -->
+<!-- roslaunch lsc_planner zed_mapping.launch -->
+<!-- roslaunch zed_wrapper zed_no_tf.launch -->
+<!-- rosrun octomap_server octomap_saver ~/mapname.bt -->
+
+<launch>
+  <!-- Parameters -->
+  <arg name="rviz" default="true" />
+  <arg name="world_resolution" default="0.1"/>
+
+  <!-- Nodes -->
+
+  <node pkg="optitrack_bridge" type="optitrack_bridge_node" name="optitrack_bridge_node" output="screen">
+    <param name="frame_id" value="/world" type="str" />
+    <param name="message_type" value="tf" type="str" /> <!-- pose, odom, tf -->
+    <param name="show_latency" value="false" type="bool" />
+    <param name="publish_labeled_marker_pose_array" value="false" type="bool" /> <!-- need to check labeled marker in motive -->
+    <param name="publish_unlabeled_marker_pose_array" value="false" type="bool" /> <!-- need to check unlabeled marker in motive -->
+  </node>
+
+  <node pkg="tf" type="static_transform_publisher" name="zed_broadcaster" args="0 0 0 0 0 0 1 zed_pose base_link 100" />
+
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find lsc_planner)/launch/rviz_config/zed_mapping.rviz" if="$(arg rviz)" />
+
+  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
+    <remap from="cloud_in" to="zed_node/point_cloud/cloud_registered"/>
+    <param name="resolution"                 value="$(arg world_resolution)" />
+    <param name="frame_id"                   value="world" type="string"/>
+    <param name="sensor_model/max_range"     value="3.0" />
+    <param name="height_map"                 value="true"/>
+    <param name="filter_ground"              value="false"/>
+    <param name="color/r"                    value="0.2" />
+    <param name="color/g"                    value="0.2" />
+    <param name="color/b"                    value="0.2" />
+    <param name="color/a"                    value="0.5" />
+    <param name="pointcloud_min_z"           value="0.1" />
+    <param name="pointcloud_max_z"           value="1.1" />
+  </node>
+</launch>

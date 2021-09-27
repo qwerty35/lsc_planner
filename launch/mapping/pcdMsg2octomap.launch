@@ -1,0 +1,32 @@
+<!-- Octomap Mapping using ZED -->
+<!-- roslaunch lsc_planner zed_mapping.launch -->
+<!-- roslaunch zed_wrapper zed_no_tf.launch -->
+<!-- rosrun octomap_server octomap_saver ~/mapname.bt -->
+
+<launch>
+  <!-- Parameters -->
+  <arg name="rviz" default="true" />
+  <arg name="world_resolution" default="0.1"/>
+
+  <!-- Nodes -->
+  <node pkg="rviz" type="rviz" name="rviz"
+        args="-d $(find lsc_planner)/launch/rviz_config/mapping.rviz" if="$(arg rviz)" />
+
+  <node pkg="tf" type="static_transform_publisher" name="link1_broadcaster" args="28 19.5 0 0 0 0 1 base_link world  100" />
+
+  <node pkg="octomap_server" type="octomap_server_node" name="octomap_server">
+    <remap from="cloud_in" to="/cloud_pcd"/>
+    <param name="resolution"                 value="$(arg world_resolution)" />
+    <param name="frame_id"                   value="world" type="string"/>
+    <param name="base_frame_id"              value="world" type="string"/>
+    <param name="sensor_model/max_range"     value="-1" />
+    <param name="height_map"                 value="true"/>
+    <param name="filter_ground"              value="false"/>
+    <param name="color/r"                    value="0.2" />
+    <param name="color/g"                    value="0.2" />
+    <param name="color/b"                    value="0.2" />
+    <param name="color/a"                    value="0.5" />
+    <param name="pointcloud_min_z"           value="0.1" />
+    <param name="pointcloud_max_z"           value="5.0" />
+  </node>
+</launch>
