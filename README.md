@@ -6,7 +6,7 @@ The details can be found at the following link.
 
 - **Authors:** Jungwon Park, Dabin Kim, Gyeong Chan Kim, Dahyun Oh and H. Jin Kim from [LARR](http://larr.snu.ac.kr/), Seoul National University
 - **Paper:** Online Distributed Trajectory Planning for Quadrotor Swarm with Feasibility Guarantee using Linear Safe Corridor [PDF](https://arxiv.org/abs/2109.09041)
-- **Video:** To be released soon!
+- **Video:** [Youtube](https://youtu.be/cQ3yr-DMdhM) 
 
 ## 1. Install
 This work is implemented based on C++17. Tested in the ROS Melodic, Ubuntu 18.04
