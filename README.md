@@ -23,6 +23,7 @@ set(CPLEX_PREFIX_DIR /opt/ibm/ILOG/CPLEX_Studio201)
 sudo apt-get install ros-<distro>-dynamic-edt-3d
 sudo apt-get install ros-<distro>-octomap-ros
 ```
+(```<distro>``` is ```melodic``` or ```noetic``` depending on your ROS version.)
 
 (4) Clone and build packages
 
@@ -34,7 +35,7 @@ cd ~/catkin_ws
 catkin_make
 source ~/catkin_ws/devel/setup.bash
 ```
-(```<distro>``` is ```melodic``` or ```noetic``` depending on your ROS version.)
+
 
 ## 2. Demo
 ```
