@@ -21,6 +21,7 @@ set(CPLEX_PREFIX_DIR /opt/ibm/ILOG/CPLEX_Studio201)
 (3) Install ros dependancies
 ```
 sudo apt-get install ros-<distro>-dynamic-edt-3d
+sudo apt-get install ros-<distro>-octomap-server
 sudo apt-get install ros-<distro>-octomap-ros
 ```
 (```<distro>``` is ```melodic``` or ```noetic``` depending on your ROS version.)
