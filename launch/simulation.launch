@@ -48,7 +48,6 @@
     <param name="multisim/save_result" value="$(arg save_result_csv)" />
     <param name="multisim/replay" value="$(arg replay)" />
     <param name="multisim/replay_file_name" value="$(arg replay_file_name)" />
-    <param name="multisim/experiment" value="$(arg experiment)" />
     <param name="multisim/record_time_step" value="0.1" /> <!-- Record time step -->
     <param name="multisim/reset_threshold" value="0.15" /> <!-- If the position error is larger than this, then use reciprocal rsfc -->
 
