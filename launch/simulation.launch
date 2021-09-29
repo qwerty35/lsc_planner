@@ -96,10 +96,6 @@
     <param name="debug/stop_seq" value="-1" />
   </node>
 
-  <node pkg="lsc_planner" type="cmd_publisher_node" name="cmd_publisher_node" if="$(arg experiment)">
-    <param name="mission" value="$(arg mission)" />
-  </node>
-
   <node pkg="rviz" type="rviz" name="rviz"
         args="-d $(find lsc_planner)/launch/rviz_config/multi_config.rviz" if="$(arg rviz)" />
 
