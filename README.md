@@ -13,7 +13,10 @@ This work is implemented based on C++17. Tested in the ROS Melodic, Ubuntu 18.04
 
 (1) Install ROS Melodic for Ubuntu 18.04 or ROS Noetic for Ubuntu 20.04 (http://wiki.ros.org/ROS/Installation,  desktop-full version is recommended)
 
-(2) Install CPLEX (https://www.ibm.com/products/ilog-cplex-optimization-studio)
+(2) Install CPLEX (https://www.ibm.com/products/ilog-cplex-optimization-studio) and modify CMAKELIST depending on intallation location. For instance:
+```
+set(CPLEX_PREFIX_DIR /opt/ibm/ILOG/CPLEX_Studio201)
+```
 
 (3) Install ros dependancies
 ```
