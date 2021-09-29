@@ -123,7 +123,7 @@ add_executable(multi_sync_simulator_node
 add_dependencies(multi_sync_simulator_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(multi_sync_simulator_node
   ${catkin_LIBRARIES}
-  ${OCTOMAP_INCLUDE_DIRS}
+  ${OCTOMAP_LIBRARIES}
   ${CPLEX_LIBRARIES}
   stdc++fs
 )
