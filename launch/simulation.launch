@@ -4,6 +4,7 @@
 <!-- Parameters -->
   <!-- Mission -->
   <arg name="mission" default="multi_square16.json" /> <!-- mission file, see lsc_planner/missions/readme.txt for more details -->
+  <arg name="experiment" default="false" />
   <arg name="patrol" default="false"/> <!-- Change the mission to patrol between start and goal points -->
 
   <!-- Map -->

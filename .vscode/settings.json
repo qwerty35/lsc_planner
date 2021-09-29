@@ -1,0 +1,14 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/dabinkim/jw_ws/devel/lib/python3/dist-packages",
+        "/home/dabinkim/RL_exploration/gym-gazebo/gym_gazebo/envs/installation/catkin_ws/devel/lib/python3/dist-packages",
+        "/home/dabinkim/semantic_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/dabinkim/jw_ws/devel/lib/python3/dist-packages",
+        "/home/dabinkim/RL_exploration/gym-gazebo/gym_gazebo/envs/installation/catkin_ws/devel/lib/python3/dist-packages",
+        "/home/dabinkim/semantic_ws/devel/lib/python3/dist-packages",
+        "/opt/ros/noetic/lib/python3/dist-packages"
+    ]
+}
