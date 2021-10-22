@@ -60,7 +60,8 @@ include_directories(
 )
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS roscpp roslib message_runtime
+  CATKIN_DEPENDS roscpp roslib message_runtime octomap_ros octomap_msgs
+  DEPENDS OCTOMAP
 )
 
 #Message

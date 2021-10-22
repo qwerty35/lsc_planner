@@ -55,7 +55,8 @@
   <build_depend>rosbag</build_depend>
   <build_depend>sensor_msgs</build_depend>
   <build_depend>std_msgs</build_depend>
-  <build_depend>octomap</build_depend>
+  <build_depend>octomap_ros</build_depend>
+  <build_depend>octomap_msgs</build_depend>
   <build_depend>dynamic_msgs</build_depend>
 
   <exec_depend>roscpp</exec_depend>
@@ -64,7 +65,8 @@
   <exec_depend>sensor_msgs</exec_depend>
   <exec_depend>std_msgs</exec_depend>
   <exec_depend>message_runtime</exec_depend>
-  <exec_depend>octomap</exec_depend>
+  <exec_depend>octomap_ros</exec_depend>
+  <exec_depend>octomap_msgs</exec_depend>
   <exec_depend>dynamic_msgs</exec_depend>
    
 
