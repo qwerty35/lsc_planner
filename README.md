@@ -13,25 +13,27 @@ This work is implemented based on C++17. Tested in the ROS Melodic, Ubuntu 18.04
 
 (1) Install ROS Melodic for Ubuntu 18.04 or ROS Noetic for Ubuntu 20.04 (http://wiki.ros.org/ROS/Installation,  desktop-full version is recommended)
 
-(2) Install CPLEX (https://www.ibm.com/products/ilog-cplex-optimization-studio) and modify CMAKELIST depending on intallation location. For instance:
+(2) Install CPLEX (https://www.ibm.com/products/ilog-cplex-optimization-studio)
+
+(3) Install dependancies and clone packages 
+```
+sudo apt-get install ros-<distro>-octomap
+sudo apt-get install ros-<distro>-octomap-server
+sudo apt-get install ros-<distro>-octomap-ros
+sudo apt-get install ros-<distro>-dynamic-edt-3d
+git clone https://github.com/qwerty35/dynamic_msgs.git
+git clone https://github.com/qwerty35/graph_rviz_plugin.git
+git clone https://github.com/qwerty35/lsc_planner.git
+```
+(```<distro>``` is ```melodic``` or ```noetic``` depending on your ROS version.)
+
+(4) Before building packages, check CMAKELIST that CPLEX_PREFIX_DIR is indicating the intallation location. For instance, if CPLEX is installed in ```/opt/ibm/ILOG/CPLEX_Studio201```, then CPLEX_PREFIX_DIR should be:
 ```
 set(CPLEX_PREFIX_DIR /opt/ibm/ILOG/CPLEX_Studio201)
 ```
 
-(3) Install ros dependancies
+(5) Build packages
 ```
-sudo apt-get install ros-<distro>-dynamic-edt-3d
-sudo apt-get install ros-<distro>-octomap-server
-sudo apt-get install ros-<distro>-octomap-ros
-```
-(```<distro>``` is ```melodic``` or ```noetic``` depending on your ROS version.)
-
-(4) Clone and build packages
-
-```
-git clone https://github.com/qwerty35/dynamic_msgs.git
-git clone https://github.com/qwerty35/graph_rviz_plugin.git
-git clone https://github.com/qwerty35/lsc_planner.git
 cd ~/catkin_ws
 catkin_make
 source ~/catkin_ws/devel/setup.bash
