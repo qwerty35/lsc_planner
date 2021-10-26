@@ -45,6 +45,7 @@ source ~/catkin_ws/devel/setup.bash
 source ~/catkin_ws/devel/setup.bash
 roslaunch lsc_planner simulation.launch
 ```
+The simulation result will be saved at lsc_planner/log.
 
 ## 3. Configuration
 You can configure the simulation setting at the launch, mission files.
