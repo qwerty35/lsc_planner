@@ -33,7 +33,7 @@
 
     <!-- World -->
     <param name="world/frame_id" value="$(arg world_frame_id)" />
-    <param name="world/dimension" value="3" /> <!-- 2: 2D simulation, 3: 3D simulation -->
+    <param name="world/dimension" value="2" /> <!-- 2: 2D simulation, 3: 3D simulation -->
     <param name="world/use_octomap" value="$(arg use_octomap)" />
     <param name="world/file_name" value="$(arg world_file_name)" />
     <param name="world/resolution" value="$(arg world_resolution)" />
@@ -44,7 +44,7 @@
     <param name="multisim/qn" value="2" /> <!-- The number of agents when the agents is empty in the mission file -->
     <param name="multisim/time_step" value="0.2" /> <!-- Replanning period, if you use LSC planner then it must be equal to traj/dt -->
     <param name="multisim/patrol" value="$(arg patrol)"/>
-    <param name="multisim/max_noise" value="0.02" /> <!-- If it is larger than 0, then it adds some noise to start and goal point -->
+    <param name="multisim/max_noise" value="0.0" /> <!-- If it is larger than 0, then it adds some noise to start and goal point -->
     <param name="multisim/max_planner_iteration" value="1000" /> <!-- Maximum iteration of the planner -->
     <param name="multisim/save_result" value="$(arg save_result_csv)" />
     <param name="multisim/replay" value="$(arg replay)" />
@@ -54,7 +54,7 @@
 
     <!-- Planner mode -->
     <param name="mode/planner" value="lsc" /> <!-- lsc: LSC planner, bvc: Buffered Voronoi Cell planner -->
-    <param name="mode/goal" value="prior_based" /> <!-- right_hand: use right hand rule, prior_based: use priority-based goal planning -->
+    <param name="mode/goal" value="prior_based2" /> <!-- right_hand: use right hand rule, prior_based: use priority-based goal planning -->
 
     <!-- Trajectory representation -->
     <param name="traj/dt" value="0.2" /> <!-- Segment time, if you use LSC planner then it must be equal to multisim/time_step -->
@@ -73,11 +73,6 @@
     <param name="deadlock/velocity_threshold" value="0.1" /> <!-- if the velocity of the agent is lower than this, then the agent judge that deadlock occurred -->
     <param name="deadlock/seq_threshold" value="5" />
 
-    <!-- Iterative optimization -->
-    <param name="iteropt/iteration" value="1" />
-    <param name="iteropt/use_prev_solution" value="false" />
-    <param name="iteropt/max_planning_time" value="100000" />
-
     <!-- ORCA -->
     <param name="orca/horizon" value="2.0" />
     <param name="ocra/pref_velocity_ratio" value="1.0" />
@@ -92,8 +87,6 @@
     <param name="plan/goal_radius" value="2.0" />
     <param name="plan/priority_dist_threshold" value="0.4" />
 
-    <!-- Debug -->
-    <param name="debug/stop_seq" value="-1" />
   </node>
 
   <node pkg="rviz" type="rviz" name="rviz"

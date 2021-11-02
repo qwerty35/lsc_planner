@@ -56,6 +56,9 @@ namespace DynamicPlanning {
         else if(goal_mode_str == "prior_based"){
             goal_mode = GoalMode::PRIORBASED;
         }
+        else if(goal_mode_str == "prior_based2"){
+            goal_mode = GoalMode::PRIORBASED2;
+        }
 
         // Obstacle prediction
         nh.param<bool>("obs/size_prediction", obs_size_prediction, true);
@@ -97,9 +100,6 @@ namespace DynamicPlanning {
         nh.param<double>("plan/goal_threshold", goal_threshold, 0.1);
         nh.param<double>("plan/goal_radius", goal_radius, 100.0);
         nh.param<double>("plan/priority_dist_threshold", priority_dist_threshold, 0.4);
-
-        // Debug
-        nh.param<int>("debug/stop_seq", debug_stop_seq, -1);
 
         package_path = ros::package::getPath("lsc_planner");
 
@@ -166,7 +166,7 @@ namespace DynamicPlanning {
     }
 
     std::string Param::getGoalModeStr() const{
-        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based"};
-        return planner_mode_strs[static_cast<int>(planner_mode)];
+        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based", "prior_based2"};
+        return planner_mode_strs[static_cast<int>(goal_mode)];
     }
 }

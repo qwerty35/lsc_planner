@@ -123,7 +123,6 @@ namespace DynamicPlanning {
 
         // Flags, state
         FlagMsg flag_current_state, flag_obstacles;
-        FlagDeadlock flag_deadlock;
         bool flag_initialize_sfc;
         PlannerState planner_state;
 
@@ -143,7 +142,6 @@ namespace DynamicPlanning {
         // Trajectories
         traj_t initial_traj; // [segment_idx][control_pts_idx], initial trajectory
         traj_t traj_curr; // [segment_idx][control_pts_idx], trajectory planned in the current step
-        traj_t traj_prev; // [segment_idx][control_pts_idx], trajectory planned in the previous step
 
         // Obstacle
         std::shared_ptr<DynamicEDTOctomap> distmap_obj; // octomap
@@ -168,18 +166,9 @@ namespace DynamicPlanning {
         std::unique_ptr<RVO3D::RVOSimulator> rvo_simulator_3d;
         std::vector<octomap::point3d> orca_velocities;
 
-        // Deadlock detection
-        int deadlock_start_seq;
-        octomap::point3d deadlock_endpoint;
-        double sol_diff; // difference between current and previous solution
-
         // Grid based planner
         std::vector<octomap::point3d> grid_path;
         octomap::point3d grid_los_goal;
-
-        // Hybrid heuristic
-        std::vector<dynamic_msgs::Obstacle> narrow_corridors;
-        std::vector<dynamic_msgs::Obstacle> critical_zones;
 
         // Callback
         void currentStateCallback(const dynamic_msgs::State& msg_current_state);
@@ -190,7 +179,7 @@ namespace DynamicPlanning {
         void planORCA();
         void planLSC();
 
-        // Funcions for checking agent state
+        // Functions for checking agent state
         bool isDeadlock() const;
         void checkPlannerMode(); // Check modes in launch file are valid, and fix them automatically
 
@@ -200,6 +189,7 @@ namespace DynamicPlanning {
         void goalPlanningWithORCA();
         void goalPlanningWithRightHandRule();
         void goalPlanningWithPriority();
+        void goalPlanningWithPriority2();
 
         // Obstacle prediction
         void obstaclePrediction();

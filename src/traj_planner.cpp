@@ -43,8 +43,6 @@ namespace DynamicPlanning{
         planner_seq = 0;
         planning_report = PlanningReport::Initialized;
         N_obs = 0;
-        deadlock_start_seq = 0;
-        sol_diff = 0;
         current_qp_cost = 0;
         flag_initialize_sfc = true;
 
@@ -112,17 +110,6 @@ namespace DynamicPlanning{
         // Update clock
         sim_current_time = _sim_current_time;
 
-        // Stop at debug_stop_seq (debugging purpose)
-        if(planner_seq == param.debug_stop_seq){
-            if(planner_seq == 0){
-                planning_report = PlanningReport::Initialized;
-            }
-            else{
-                planning_report = PlanningReport::WAITFORROSMSG;
-            }
-            return planning_report;
-        }
-
         // Start planning
         planner_seq++;
         ros::Time planning_start_time = ros::Time::now();
@@ -133,7 +120,6 @@ namespace DynamicPlanning{
         flag_current_state.is_updated = false;
         orca_velocities.clear();
         obs_prev_trajs.clear();
-        traj_prev = traj_curr;
 
         // Print terminal message
         planning_time.total_planning_time.update((ros::Time::now() - planning_start_time).toSec());
@@ -393,30 +379,6 @@ namespace DynamicPlanning{
         // Trajectory optimization
         bool success = trajOptimization();
         if (success) {
-            // Check endpoint for deadlock detection (Not used in this work.)
-            if (planner_seq > param.deadlock_seq_threshold and
-                (traj_curr[M - 1][n] - traj_prev[M - 1][n]).norm() < SP_EPSILON_FLOAT and
-                (traj_curr[M - 1][n] - agent.desired_goal_position).norm() > param.goal_threshold) {
-
-                if (deadlock_start_seq == 0) {
-                    deadlock_start_seq = planner_seq;
-                    deadlock_endpoint = traj_curr[M - 1][n];
-                }
-                else if ((traj_curr[M - 1][n] - deadlock_endpoint).norm() > SP_EPSILON_FLOAT) {
-                    deadlock_start_seq = planner_seq;
-                    deadlock_endpoint = traj_curr[M - 1][n];
-                }
-            }
-
-            // Save difference between traj_prev and traj_curr (Not used in this work)
-            if(planner_seq > 2){
-                sol_diff = 0;
-                for(int m = 0; m < M; m++){
-                    for(int i = 0; i < n + 1; i++){
-                        sol_diff += (traj_curr[m][i] - traj_prev[m][i]).norm();
-                    }
-                }
-            }
             planning_report = PlanningReport::SUCCESS;
         }
         else { // if not success
@@ -501,6 +463,9 @@ namespace DynamicPlanning{
                 break;
             case GoalMode::PRIORBASED:
                 goalPlanningWithPriority();
+                break;
+            case GoalMode::PRIORBASED2:
+                goalPlanningWithPriority2();
                 break;
             default:
                 throw std::invalid_argument("[TrajPlanner] Invalid goal mode");
@@ -591,6 +556,124 @@ namespace DynamicPlanning{
         grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
                                             agent.id, agent.radius, agent.downwash,
                                             obstacles, high_priority_obstacle_ids);
+        if(grid_path.empty()) {
+            // A* without priority
+            grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
+                                                agent.id, agent.radius, agent.downwash,
+                                                obstacles);
+        }
+
+        // Find los-free goal from end of the initial trajectory
+        grid_los_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
+                                                           agent.desired_goal_position,
+                                                           obstacles,
+                                                           agent.radius);
+
+        agent.current_goal_position = grid_los_goal;
+    }
+
+    void TrajPlanner::goalPlanningWithPriority2() {
+        //Find cluster
+        std::set<int> cluster;
+        std::queue<int> cluster_search_queue;
+        int cluster_highest_priority_obs_id = -1;
+        double cluster_closest_dist_to_goal = SP_INFINITY;
+        double agent_dist_to_goal = (agent.current_state.position - agent.desired_goal_position).norm();
+        if(agent_dist_to_goal > param.goal_threshold){
+            cluster_closest_dist_to_goal = agent_dist_to_goal;
+        }
+
+        octomap::point3d agent_future_position = initial_traj[M-1][n];
+
+        for(int oi = 0; oi < N_obs; oi++){
+            if(obstacles[oi].type == ObstacleType::AGENT) {
+                octomap::point3d obs_goal_position = pointMsgToPoint3d(obstacles[oi].goal_point);
+                octomap::point3d obs_curr_position = pointMsgToPoint3d(obstacles[oi].pose.position);
+                octomap::point3d obs_future_position = obs_pred_trajs[oi][M-1][n];
+
+                double obs_dist_to_goal = (obs_curr_position - obs_goal_position).norm();
+                double future_dist_to_obs = distBetweenAgents(obs_future_position, agent_future_position, agent.downwash);
+                double safety_distance = obstacles[oi].radius + agent.radius + 0.001;
+
+                // If future position among agents are too close then find the highest priority agent
+                if(future_dist_to_obs < safety_distance){
+                    cluster_search_queue.push(oi);
+                    cluster.emplace(oi);
+
+                    // Do not consider the priority when other agent is near goal.
+                    if(obs_dist_to_goal < param.goal_threshold){
+                        continue;
+                    }
+
+                    // If the agent is near goal, all other agents have higher priority
+                    // Else the agents with smaller dist_to_goal have higher priority
+                    if (obs_dist_to_goal < cluster_closest_dist_to_goal) {
+                        cluster_highest_priority_obs_id = obstacles[oi].id;
+                        cluster_closest_dist_to_goal = obs_dist_to_goal;
+                    }
+                }
+            }
+        }
+
+        while(not cluster_search_queue.empty()){
+            int curr_obs_idx = cluster_search_queue.front();
+            cluster_search_queue.pop();
+
+            octomap::point3d curr_obs_future_position = obs_pred_trajs[curr_obs_idx][M-1][n];
+
+            for(int oi = 0; oi < N_obs; oi++){
+                if(oi == curr_obs_idx or cluster.find(oi) != cluster.end()){
+                    continue;
+                }
+
+                octomap::point3d obs_goal_position = pointMsgToPoint3d(obstacles[oi].goal_point);
+                octomap::point3d obs_curr_position = pointMsgToPoint3d(obstacles[oi].pose.position);
+                octomap::point3d obs_future_position = obs_pred_trajs[oi][M-1][n];
+
+                double obs_dist_to_goal = (obs_curr_position - obs_goal_position).norm();
+                double future_dist_to_obs = distBetweenAgents(obs_future_position, curr_obs_future_position, obstacles[curr_obs_idx].downwash);
+                double safety_distance = obstacles[oi].radius + obstacles[curr_obs_idx].radius + 0.001;
+
+                if(future_dist_to_obs < safety_distance){
+                    cluster_search_queue.push(oi);
+                    cluster.emplace(oi);
+
+                    if(obs_dist_to_goal < param.goal_threshold){
+                        continue;
+                    }
+
+                    if (obs_dist_to_goal < cluster_closest_dist_to_goal) {
+                        cluster_highest_priority_obs_id = obstacles[oi].id;
+                        cluster_closest_dist_to_goal = obs_dist_to_goal;
+                    }
+                }
+            }
+        }
+
+
+        // If the distance to a higher priority agent is too short, then move away from that agent.
+
+        if(cluster_highest_priority_obs_id != -1){
+            if(isDeadlock()){
+                double dist_keep = (obstacles[cluster_highest_priority_obs_id].radius + agent.radius) * 1.5;
+                octomap::point3d obs_curr_position = pointMsgToPoint3d(obstacles[cluster_highest_priority_obs_id].pose.position);
+                agent.current_goal_position = agent.current_state.position -
+                        (obs_curr_position - agent.current_state.position).normalized() * dist_keep;
+            }
+            else{
+                octomap::point3d z_axis(0, 0, 1);
+                agent.current_goal_position = agent.current_state.position +
+                        (agent.desired_goal_position - agent.current_state.position).cross(z_axis);
+            }
+
+            return;
+        }
+
+        // A* considering priority
+        GridBasedPlanner grid_based_planner(distmap_obj, mission, param);
+        grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
+                                            agent.id, agent.radius, agent.downwash,
+                                            obstacles, cluster);
         if(grid_path.empty()) {
             // A* without priority
             grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
@@ -1731,20 +1814,11 @@ namespace DynamicPlanning{
     }
 
     bool TrajPlanner::isDeadlock() const {
-//        if(param.deadlock_mode == "velocity") {
-            //If agent's velocity is lower than some threshold, then it determines agent is in deadlock
-            double dist_to_goal = (agent.current_state.position - agent.desired_goal_position).norm();
-            return planner_seq > param.deadlock_seq_threshold and
-                   agent.current_state.velocity.norm() < param.deadlock_velocity_threshold and
-                   dist_to_goal > param.goal_threshold;
-//        }
-//
-//        if(param.deadlock_mode == "endpoint"){
-//            return deadlock_start_seq > 0 and
-//                   (planner_seq - deadlock_start_seq) > param.deadlock_seq_threshold and
-//                   (traj_curr[M - 1][n] - deadlock_endpoint).norm() < SP_EPSILON_FLOAT and
-//                   (traj_curr[M - 1][n] - agent.desired_goal_position).norm() > param.goal_threshold;
-//        }
+        //If agent's velocity is lower than some threshold, then it determines agent is in deadlock
+        double dist_to_goal = (agent.current_state.position - agent.desired_goal_position).norm();
+        return planner_seq > param.deadlock_seq_threshold and
+               agent.current_state.velocity.norm() < param.deadlock_velocity_threshold and
+               dist_to_goal > param.goal_threshold;
     }
 
     int TrajPlanner::findObstacleIdxById(int obs_id) const{

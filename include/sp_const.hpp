@@ -68,6 +68,7 @@ namespace DynamicPlanning {
         ORCA,
         RIGHTHAND,
         PRIORBASED,
+        PRIORBASED2,
     };
 
     enum PlannerState {

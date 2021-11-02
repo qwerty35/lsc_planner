@@ -66,11 +66,6 @@ namespace DynamicPlanning{
         double deadlock_velocity_threshold;
         int deadlock_seq_threshold;
 
-        // Iterative optimization
-        int trajopt_iteration;
-        bool use_prev_solution;
-        double max_planning_time;
-
         // Filter
         double filter_sigma_y_sq;
         double filter_sigma_v_sq;
@@ -89,9 +84,6 @@ namespace DynamicPlanning{
         double goal_threshold;
         double goal_radius;
         double priority_dist_threshold;
-
-        // Others
-        int debug_stop_seq; //debugging purpose
 
         bool initialize(const ros::NodeHandle &nh);
         std::string getPlannerModeStr() const;
