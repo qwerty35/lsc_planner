@@ -23,9 +23,9 @@ namespace DynamicPlanning{
         return nChoosek(n, i) * pow(t_normalized, i) * pow(1-t_normalized, n - i);
     }
 
-    static octomap::point3d getPointFromControlPoints(std::vector<octomap::point3d> control_points,
-                                                      double t_normalized){
-        octomap::point3d point;
+    static point_t getPointFromControlPoints(points_t control_points,
+                                             double t_normalized){
+        point_t point;
         double t = t_normalized;
         if(t < 0 - SP_EPSILON || t > 1 + SP_EPSILON){
             throw std::invalid_argument("[Polynomial] Input of getPointFromControlPoints is out of bound");
@@ -40,7 +40,7 @@ namespace DynamicPlanning{
             z += control_points[i].z() * b_i_n;
         }
 
-        point = octomap::point3d((float)x, (float)y, (float)z);
+        point = point_t((float)x, (float)y, (float)z);
         return point;
     }
 
@@ -60,7 +60,7 @@ namespace DynamicPlanning{
         return x;
     }
 
-    static dynamic_msgs::State getStateFromControlPoints(std::vector<std::vector<octomap::point3d>> control_points,
+    static dynamic_msgs::State getStateFromControlPoints(std::vector<points_t> control_points,
                                                          double current_time, int M, int n, double dt){
         dynamic_msgs::State state;
         int m = static_cast<int>(current_time / dt);
@@ -71,48 +71,48 @@ namespace DynamicPlanning{
             throw std::invalid_argument("[Polynomial] Input of getOdom is out of bound");
         }
 
-        octomap::point3d position = getPointFromControlPoints(control_points[m], current_time/dt - m);
+        point_t position = getPointFromControlPoints(control_points[m], current_time / dt - m);
         state.pose.position.x = position.x();
         state.pose.position.y = position.y();
         state.pose.position.z = position.z();
 
-        std::vector<octomap::point3d> velocity_points;
+        points_t velocity_points;
         velocity_points.resize(n);
         for(int i = 0; i < n; i++){
             velocity_points[i] = (control_points[m][i+1] - control_points[m][i]) * n * pow(dt, -1);
         }
-        octomap::point3d velocity = getPointFromControlPoints(velocity_points, current_time/dt - m);
+        point_t velocity = getPointFromControlPoints(velocity_points, current_time / dt - m);
         state.velocity.linear.x = velocity.x();
         state.velocity.linear.y = velocity.y();
         state.velocity.linear.z = velocity.z();
 
-        std::vector<octomap::point3d> acceleration_points;
+        points_t acceleration_points;
         acceleration_points.resize(n-1);
         for(int i = 0; i < n-1; i++){
             acceleration_points[i] = (velocity_points[i+1] - velocity_points[i]) * (n-1) * pow(dt, -1);
         }
-        octomap::point3d acceleration = getPointFromControlPoints(acceleration_points, current_time/dt - m);
+        point_t acceleration = getPointFromControlPoints(acceleration_points, current_time / dt - m);
         state.acceleration.linear.x = acceleration.x();
         state.acceleration.linear.y = acceleration.y();
         state.acceleration.linear.z = acceleration.z();
 
-        std::vector<octomap::point3d> jerk_points;
+        points_t jerk_points;
         jerk_points.resize(n-2);
         for(int i = 0; i < n-2; i++){
             jerk_points[i] = (acceleration_points[i+1] - acceleration_points[i]) * (n-2) * pow(dt, -1);
         }
-        octomap::point3d jerk = getPointFromControlPoints(jerk_points, current_time/dt - m);
+        point_t jerk = getPointFromControlPoints(jerk_points, current_time / dt - m);
 
-        octomap::point3d thrust = acceleration + octomap::point3d(0, 0, 9.81); // add gravity
+        point_t thrust = acceleration + point_t(0, 0, 9.81); // add gravity
 
-        octomap::point3d z_body = thrust.normalized();
-        octomap::point3d x_world(1, 0, 0);
-        octomap::point3d y_body = (z_body.cross(x_world)).normalized();
-        octomap::point3d x_body = y_body.cross(z_body);
+        point_t z_body = thrust.normalized();
+        point_t x_world(1, 0, 0);
+        point_t y_body = (z_body.cross(x_world)).normalized();
+        point_t x_body = y_body.cross(z_body);
 
-        octomap::point3d jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
-        octomap::point3d h_w = jerk_orth_zbody * (1 / thrust.norm());
-        octomap::point3d omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
+        point_t jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
+        point_t h_w = jerk_orth_zbody * (1 / thrust.norm());
+        point_t omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
         state.velocity.angular.x = omega.x();
         state.velocity.angular.y = omega.y();
         state.velocity.angular.z = omega.z();
@@ -120,7 +120,7 @@ namespace DynamicPlanning{
         return state;
     }
 
-    static dynamic_msgs::State getStateFromControlPoints(std::vector<std::vector<octomap::point3d>> control_points,
+    static dynamic_msgs::State getStateFromControlPoints(std::vector<points_t> control_points,
                                                          double current_time, int M, int n,
                                                          std::vector<double> time_segments){
         dynamic_msgs::State state;
@@ -142,7 +142,7 @@ namespace DynamicPlanning{
             t_normalized = (current_time - time_segments[m]) / segment_length;
         }
 
-        octomap::point3d position = getPointFromControlPoints(control_points[m], t_normalized);
+        point_t position = getPointFromControlPoints(control_points[m], t_normalized);
         state.pose.position.x = position.x();
         state.pose.position.y = position.y();
         state.pose.position.z = position.z();
@@ -151,43 +151,43 @@ namespace DynamicPlanning{
             return state;
         }
 
-        std::vector<octomap::point3d> velocity_points;
+        points_t velocity_points;
         velocity_points.resize(n);
         for(int i = 0; i < n; i++){
             velocity_points[i] = (control_points[m][i+1] - control_points[m][i]) * n * pow(segment_length, -1);
         }
-        octomap::point3d velocity = getPointFromControlPoints(velocity_points, t_normalized);
+        point_t velocity = getPointFromControlPoints(velocity_points, t_normalized);
         state.velocity.linear.x = velocity.x();
         state.velocity.linear.y = velocity.y();
         state.velocity.linear.z = velocity.z();
 
-        std::vector<octomap::point3d> acceleration_points;
+        points_t acceleration_points;
         acceleration_points.resize(n-1);
         for(int i = 0; i < n-1; i++){
             acceleration_points[i] = (velocity_points[i+1] - velocity_points[i]) * (n-1) * pow(segment_length, -1);
         }
-        octomap::point3d acceleration = getPointFromControlPoints(acceleration_points, t_normalized);
+        point_t acceleration = getPointFromControlPoints(acceleration_points, t_normalized);
         state.acceleration.linear.x = acceleration.x();
         state.acceleration.linear.y = acceleration.y();
         state.acceleration.linear.z = acceleration.z();
 
-        std::vector<octomap::point3d> jerk_points;
+        points_t jerk_points;
         jerk_points.resize(n-1);
         for(int i = 0; i < n-1; i++){
             jerk_points[i] = (acceleration_points[i+1] - acceleration_points[i]) * (n-2) * pow(segment_length, -1);
         }
-        octomap::point3d jerk = getPointFromControlPoints(jerk_points, t_normalized);
+        point_t jerk = getPointFromControlPoints(jerk_points, t_normalized);
 
-        octomap::point3d thrust = acceleration + octomap::point3d(0, 0, 9.81); // add gravity
+        point_t thrust = acceleration + point_t(0, 0, 9.81); // add gravity
 
-        octomap::point3d z_body = thrust.normalized();
-        octomap::point3d x_world(1, 0, 0);
-        octomap::point3d y_body = (z_body.cross(x_world)).normalized();
-        octomap::point3d x_body = y_body.cross(z_body);
+        point_t z_body = thrust.normalized();
+        point_t x_world(1, 0, 0);
+        point_t y_body = (z_body.cross(x_world)).normalized();
+        point_t x_body = y_body.cross(z_body);
 
-        octomap::point3d jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
-        octomap::point3d h_w = jerk_orth_zbody * (1 / thrust.norm());
-        octomap::point3d omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
+        point_t jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
+        point_t h_w = jerk_orth_zbody * (1 / thrust.norm());
+        point_t omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
         state.velocity.angular.x = omega.x();
         state.velocity.angular.y = omega.y();
         state.velocity.angular.z = omega.z();
@@ -195,7 +195,7 @@ namespace DynamicPlanning{
         return state;
     }
 
-    static std::vector<octomap::point3d> bernsteinFitting(std::vector<octomap::point3d> target_points,
+    static points_t bernsteinFitting(points_t target_points,
                                                           std::vector<double> ts_normalized){
         int n = (int)target_points.size() - 1;
         Eigen::MatrixXd B = Eigen::MatrixXd(n+1, n+1);
@@ -213,10 +213,10 @@ namespace DynamicPlanning{
         }
 
         Eigen::MatrixXd C = B.inverse() * X;
-        std::vector<octomap::point3d> control_points;
+        points_t control_points;
         control_points.resize(n+1);
         for(int i = 0; i < n + 1; i++){
-            control_points[i] = octomap::point3d(C(i, 0), C(i, 1), C(i, 2));
+            control_points[i] = point_t(C(i, 0), C(i, 1), C(i, 2));
         }
         return control_points;
     }
@@ -307,11 +307,11 @@ namespace DynamicPlanning{
     }
 
     // pi_i = obstacle position, pi_j = agent_position
-    static double distanceBetweenPolys(const std::vector<octomap::point3d>& control_points_agent,
-                                       const std::vector<octomap::point3d>& control_points_obs,
+    static double distanceBetweenPolys(const points_t& control_points_agent,
+                                       const points_t& control_points_obs,
                                        const Eigen::MatrixXd& B,
                                        double poly_root_tolerance,
-                                       octomap::point3d& closest_point) {
+                                       point_t& closest_point) {
         if(control_points_agent.size() != control_points_obs.size()){
             throw std::invalid_argument("[Polynomial] degree of two polynomials are not same.");
         }
@@ -320,7 +320,7 @@ namespace DynamicPlanning{
         int dim = 3;
 
         //get control points of relative trajectory
-        std::vector<octomap::point3d> control_points_rel;
+        points_t control_points_rel;
         control_points_rel.resize(n + 1);
         for(int i = 0; i < n + 1; i++){
             control_points_rel[i].x() = control_points_agent[i].x() - control_points_obs[i].x();
@@ -363,7 +363,7 @@ namespace DynamicPlanning{
         bool isClosestPointInSection = false;
         double a, b, m, g_m, t_cand, dist_cand;
         double dist_closest = SP_INFINITY;
-        octomap::point3d p_cand;
+        point_t p_cand;
         for(auto section : Isol){
             a = section.first;
             b = section.second;
@@ -427,8 +427,8 @@ namespace DynamicPlanning{
         B_inv = B.inverse();
     }
 
-    static std::vector<octomap::point3d> subdivisionBernsteinCurve(
-            const std::vector<octomap::point3d>& control_points, double a, double b,
+    static points_t subdivisionBernsteinCurve(
+            const points_t& control_points, double a, double b,
             const Eigen::MatrixXd& B,  const Eigen::MatrixXd& B_inv){
         size_t n = control_points.size() - 1;
         Eigen::MatrixXd A = Eigen::MatrixXd::Zero(n + 1, n + 1);
@@ -446,10 +446,10 @@ namespace DynamicPlanning{
         }
         c_tr = c_tr * B * A * B_inv;
 
-        std::vector<octomap::point3d> control_points_tr;
+        points_t control_points_tr;
         control_points_tr.resize(n + 1);
         for(int i = 0; i < n + 1; i++){
-            control_points_tr[i] = octomap::point3d(c_tr(0, i), c_tr(1, i), c_tr(2, i));
+            control_points_tr[i] = point_t(c_tr(0, i), c_tr(1, i), c_tr(2, i));
         }
         return control_points_tr;
     }

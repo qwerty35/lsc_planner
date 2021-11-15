@@ -42,63 +42,61 @@
 #include <octomap_msgs/conversions.h>
 #include <octomap/OcTree.h>
 #include <dynamicEDT3D/dynamicEDTOctomap.h>
-#include <corridor_constructor.hpp>
 
 
 namespace DynamicPlanning {
     class TrajPlanner {
     public:
-        TrajPlanner(int _agent_id, const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission);
-
-        void initializeROS();
+        TrajPlanner(int _agent_id, const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission,
+                    const std::shared_ptr<DynamicEDTOctomap>& _distmap_ptr);
 
         PlanningReport plan(ros::Time _sim_current_time);
 
         void publish();
 
+        void reset(const dynamic_msgs::State& msg_current_state);
+
         // Setter
         void setCurrentState(const dynamic_msgs::State& msg_current_state);
 
-        void setDistMap(const std::shared_ptr<DynamicEDTOctomap>& distmap_obj);
+        void setDistMap(const std::shared_ptr<DynamicEDTOctomap>& distmap_ptr);
 
         void setObstacles(const dynamic_msgs::ObstacleArray& msg_dynamic_obstacles);
 
         void setObsPrevTrajs(const std::vector<traj_t>& obs_prev_trajs);
 
-        void reset(const dynamic_msgs::State& msg_current_state);
+        void setPlannerState(const PlannerState& new_planner_state);
 
-        void updatePlannerState(const PlannerState& new_planner_state);
+        void setStartPosition(const point_t& new_start_position);
 
-        void setStart(const octomap::point3d& new_start_position);
-
-        void setDesiredGoal(const octomap::point3d& new_desired_goal);
+        void setDesiredGoal(const point_t& new_desired_goal);
 
         // Getter
-        octomap::point3d getCurrentPosition() const;
+        [[nodiscard]] point_t getCurrentPosition() const;
 
-        dynamic_msgs::State getCurrentStateMsg() const;
+        [[nodiscard]] dynamic_msgs::State getCurrentStateMsg() const;
 
-        dynamic_msgs::State getFutureStateMsg(double future_time) const;
+        [[nodiscard]] dynamic_msgs::State getFutureStateMsg(double future_time) const;
 
-        octomap::point3d getAgentORCAVelocity() const;
+        [[nodiscard]] point_t getAgentORCAVelocity() const;
 
-        octomap::point3d getObsORCAVelocity(int oi) const;
+        [[nodiscard]] point_t getObsORCAVelocity(int oi) const;
 
-        PlanningTimeStatistics getPlanningTime() const;
+        [[nodiscard]] PlanningTimeStatistics getPlanningTime() const;
 
-        double getQPCost() const;
+        [[nodiscard]] double getTrajCost() const;
 
-        PlanningReport getPlanningReport() const;
+        [[nodiscard]] PlanningReport getPlanningReport() const;
 
-        std::vector<std::vector<octomap::point3d>> getTraj() const;
+        [[nodiscard]] traj_t getTraj() const;
 
-        octomap::point3d getNormalVector(int obs_id, int m) const;
+        [[nodiscard]] vector_t getNormalVector(int obs_id, int m) const;
 
-        octomap::point3d getCurrentGoalPosition() const;
+        [[nodiscard]] point_t getCurrentGoalPosition() const;
 
-        octomap::point3d getDesiredGoalPosition() const;
+        [[nodiscard]] point_t getDesiredGoalPosition() const;
 
-        int getPlannerSeq() const;
+        [[nodiscard]] int getPlannerSeq() const;
 
     private:
         Param param;
@@ -106,8 +104,6 @@ namespace DynamicPlanning {
 
         // ROS
         ros::NodeHandle nh;
-        ros::Subscriber sub_current_state;
-        ros::Subscriber sub_obstacles;
         ros::Publisher pub_collision_constraints_raw;
         ros::Publisher pub_collision_constraints_vis;
         ros::Publisher pub_initial_traj_raw;
@@ -115,10 +111,6 @@ namespace DynamicPlanning {
         ros::Publisher pub_obs_pred_traj_raw;
         ros::Publisher pub_obs_pred_traj_vis;
         ros::Publisher pub_grid_path;
-
-        // Times
-        ros::Time obstacle_start_time;
-        ros::Time obstacle_update_time;
         ros::Time sim_current_time;
 
         // Flags, state
@@ -132,7 +124,7 @@ namespace DynamicPlanning {
         // Report
         PlanningReport planning_report;
         PlanningTimeStatistics planning_time;
-        double current_qp_cost;
+        double traj_cost;
         int planner_seq;
 
         // Frequently used constants
@@ -141,12 +133,11 @@ namespace DynamicPlanning {
 
         // Trajectories
         traj_t initial_traj; // [segment_idx][control_pts_idx], initial trajectory
-        traj_t traj_curr; // [segment_idx][control_pts_idx], trajectory planned in the current step
+        traj_t desired_traj; // [segment_idx][control_pts_idx], desired trajectory
 
         // Obstacle
-        std::shared_ptr<DynamicEDTOctomap> distmap_obj; // octomap
-        //TODO: make obstacle struct
-        std::vector<dynamic_msgs::Obstacle> obstacles; // [obs_idx], obstacles
+        std::shared_ptr<DynamicEDTOctomap> distmap_ptr; // octomap
+        std::vector<Obstacle> obstacles; // [obs_idx], obstacles
         std::vector<traj_t> obs_pred_trajs; // [obs_idx][segment_idx][control_pts_idx], predicted trajectory of obstacles
         std::vector<traj_t> obs_prev_trajs; // [obs_idx][segment_idx][control_pts_idx], trajectory of obstacles planned at the previous step
         std::vector<std::vector<std::vector<double>>> obs_pred_sizes; // [obs_idx][segment_idx][control_pts_idx], predicted obstacle size
@@ -164,15 +155,14 @@ namespace DynamicPlanning {
         // ORCA
         std::unique_ptr<RVO2D::RVOSimulator> rvo_simulator_2d;
         std::unique_ptr<RVO3D::RVOSimulator> rvo_simulator_3d;
-        std::vector<octomap::point3d> orca_velocities;
+        points_t orca_velocities;
 
         // Grid based planner
-        std::vector<octomap::point3d> grid_path;
-        octomap::point3d grid_los_goal;
+        points_t grid_path;
+        point_t grid_los_goal;
 
-        // Callback
-        void currentStateCallback(const dynamic_msgs::State& msg_current_state);
-        void obstaclesCallback(const dynamic_msgs::ObstacleArray& msg_obstacles);
+        // ROS
+        void initializeROS();
 
         // Planner module
         void planImpl();
@@ -180,8 +170,8 @@ namespace DynamicPlanning {
         void planLSC();
 
         // Functions for checking agent state
-        bool isDeadlock() const;
         void checkPlannerMode(); // Check modes in launch file are valid, and fix them automatically
+        [[nodiscard]] bool isDeadlock() const;
 
         // Goal planning
         void goalPlanning();
@@ -225,31 +215,13 @@ namespace DynamicPlanning {
         void generateLSC();
         void generateBVC();
         void generateSFC();
-        void generateFeasibleSFC();
 
-        static octomap::point3d normalVector(const octomap::point3d& obs_start, const octomap::point3d& obs_goal,
-                                      const octomap::point3d& agent_start, const octomap::point3d& agent_goal,
+        static point_t normalVector(const point_t& obs_start, const point_t& obs_goal,
+                                      const point_t& agent_start, const point_t& agent_goal,
                                       double& closest_dist);
 
-        static octomap::point3d normalVectorGreedy(const octomap::point3d& obs_start, const octomap::point3d& obs_goal,
-                                            const octomap::point3d& agent_start, const octomap::point3d& agent_goal,
-                                            double r);
-
-        octomap::point3d normalVectorStaticObsGreedy(const octomap::point3d& obstacle_point,
-                                                     const octomap::point3d& start_point,
-                                                     const octomap::point3d& initial_goal_point,
-                                                     const octomap::point3d& desired_goal_point,
-                                                     const octomap::point3d& static_obs_type,
-                                                     double radius);
-
-        octomap::point3d normalVectorStaticObs(const dynamic_msgs::Obstacle& obstacle,
-                                               const octomap::point3d& pi_i_0,
-                                               const octomap::point3d& pi_i_1,
-                                               const octomap::point3d& obstacle_point,
-                                               const octomap::point3d& static_obs_type);
-
-        static octomap::point3d normalVectorBetweenPolys(const std::vector<octomap::point3d>& control_points_agent,
-                                                  const std::vector<octomap::point3d>& control_points_obs);
+        static point_t normalVectorBetweenPolys(const points_t& control_points_agent,
+                                                  const points_t& control_points_obs);
 
         // Trajectory Optimization
         bool trajOptimization();
@@ -261,13 +233,10 @@ namespace DynamicPlanning {
         void publishObstaclePrediction();
 
         // Utility functions
-        int findObstacleIdxById(int obs_id) const;
+        [[nodiscard]] int findObstacleIdxById(int obs_id) const;
 
-        // transform cuboid static obstacle to effective sphere obstacle located at param point
-        octomap::point3d transformStaticObstacle(int oi, octomap::point3d& static_obs_type);
-
-        double computeCollisionTimeToDistmap(const octomap::point3d& start_position,
-                                             const octomap::point3d& goal_position,
+        double computeCollisionTimeToDistmap(const point_t& start_position,
+                                             const point_t& goal_position,
                                              double agent_radius,
                                              double time_horizon);
 

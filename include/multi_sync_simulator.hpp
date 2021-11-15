@@ -23,7 +23,7 @@ namespace DynamicPlanning {
     public:
         MultiSyncSimulator(const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission);
 
-        void setOctomap(std::string file_name);
+        void setDistmap(const std::string& file_name);
         void run();
 
     private:
@@ -55,7 +55,7 @@ namespace DynamicPlanning {
 
         const Param param;
         Mission mission;
-        std::shared_ptr<DynamicEDTOctomap> distmap_obj;
+        std::shared_ptr<DynamicEDTOctomap> distmap_ptr;
         std::vector<std::unique_ptr<TrajPlanner>> agents;
         ObstacleGenerator obstacle_generator;
         visualization_msgs::MarkerArray msg_agent_trajectories;

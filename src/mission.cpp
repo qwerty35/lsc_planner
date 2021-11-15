@@ -29,8 +29,8 @@ namespace DynamicPlanning {
             throw std::invalid_argument("[Mission] World must have one element");
         }
         const Value &dimension = world_list[0].GetObject()["dimension"];
-        world_min = octomap::point3d(dimension[0].GetDouble(), dimension[1].GetDouble(), dimension[2].GetDouble());
-        world_max = octomap::point3d(dimension[3].GetDouble(), dimension[4].GetDouble(), dimension[5].GetDouble());
+        world_min = point_t(dimension[0].GetDouble(), dimension[1].GetDouble(), dimension[2].GetDouble());
+        world_max = point_t(dimension[3].GetDouble(), dimension[4].GetDouble(), dimension[5].GetDouble());
 
         // Quadrotors
         const Value& quadrotor_list = document["quadrotors"];
@@ -87,14 +87,14 @@ namespace DynamicPlanning {
             }
             const Value &start = agents_list[qi].GetObject()["start"];
             if(world_dimension == 2){
-                agents[qi].start_position = octomap::point3d(start[0].GetDouble(),
-                                                             start[1].GetDouble(),
-                                                             world_z_2d);
+                agents[qi].start_position = point_t(start[0].GetDouble(),
+                                                    start[1].GetDouble(),
+                                                    world_z_2d);
             }
             else{
-                agents[qi].start_position = octomap::point3d(start[0].GetDouble(),
-                                                             start[1].GetDouble(),
-                                                             start[2].GetDouble());
+                agents[qi].start_position = point_t(start[0].GetDouble(),
+                                                    start[1].GetDouble(),
+                                                    start[2].GetDouble());
             }
 
 
@@ -105,14 +105,14 @@ namespace DynamicPlanning {
             }
             const Value &goal = agents_list[qi].GetObject()["goal"];
             if(world_dimension == 2){
-                agents[qi].desired_goal_position = octomap::point3d(goal[0].GetDouble(),
-                                                                    goal[1].GetDouble(),
-                                                                    world_z_2d);
+                agents[qi].desired_goal_position = point_t(goal[0].GetDouble(),
+                                                           goal[1].GetDouble(),
+                                                           world_z_2d);
             }
             else{
-                agents[qi].desired_goal_position = octomap::point3d(goal[0].GetDouble(),
-                                                                    goal[1].GetDouble(),
-                                                                    goal[2].GetDouble());
+                agents[qi].desired_goal_position = point_t(goal[0].GetDouble(),
+                                                           goal[1].GetDouble(),
+                                                           goal[2].GetDouble());
             }
 
             // radius
@@ -262,21 +262,22 @@ namespace DynamicPlanning {
                 obstacles[oi] = std::make_shared<GaussianObstacle>(obs_start, obs_size, obs_initial_vel, obs_max_vel,
                                                                    obs_stddev_acc, obs_max_acc, obs_acc_update_cycle,
                                                                    obs_downwash); //TODO: gamma parameterization
-            } else if(type == "static"){
-                geometry_msgs::Point obs_pose;
-                const Value &pose = obstacle_list[oi].GetObject()["pose"];
-                obs_pose.x = pose[0].GetDouble();
-                obs_pose.y = pose[1].GetDouble();
-                obs_pose.z = pose[2].GetDouble();
-
-                geometry_msgs::Point obs_dimensions;
-                const Value &dimensions = obstacle_list[oi].GetObject()["dimensions"];
-                obs_dimensions.x = dimensions[0].GetDouble();
-                obs_dimensions.y = dimensions[1].GetDouble();
-                obs_dimensions.z = dimensions[2].GetDouble();
-
-                obstacles[oi] = std::make_shared<StaticObstacle>(obs_pose, obs_dimensions);
             }
+//            else if(type == "static"){
+//                geometry_msgs::Point obs_pose;
+//                const Value &pose = obstacle_list[oi].GetObject()["pose"];
+//                obs_pose.x = pose[0].GetDouble();
+//                obs_pose.y = pose[1].GetDouble();
+//                obs_pose.z = pose[2].GetDouble();
+//
+//                geometry_msgs::Point obs_dimensions;
+//                const Value &dimensions = obstacle_list[oi].GetObject()["dimensions"];
+//                obs_dimensions.x = dimensions[0].GetDouble();
+//                obs_dimensions.y = dimensions[1].GetDouble();
+//                obs_dimensions.z = dimensions[2].GetDouble();
+//
+//                obstacles[oi] = std::make_shared<StaticObstacle>(obs_pose, obs_dimensions);
+//            }
             else if(type == "bernstein"){
                 std::string traj_csv_path = obstacle_list[oi].GetObject()["traj_csv_path"].GetString();
                 int obs_traj_n = obstacle_list[oi].GetObject()["n"].GetInt();
@@ -285,7 +286,7 @@ namespace DynamicPlanning {
                 double obs_max_acc = obstacle_list[oi].GetObject()["max_acc"].GetDouble();
                 double obs_downwash = obstacle_list[oi].GetObject()["downwash"].GetDouble();
 
-                std::vector<std::vector<octomap::point3d>> total_control_points;
+                std::vector<points_t> total_control_points;
                 std::vector<double> time_segments;
                 time_segments.emplace_back(0.0);
 
@@ -296,7 +297,7 @@ namespace DynamicPlanning {
                     if(row.size() < 2){
                         break;
                     }
-                    std::vector<octomap::point3d> segment_control_points;
+                    points_t segment_control_points;
                     segment_control_points.resize(obs_traj_n + 1);
                     for(int k = 0; k < dim; k++){
                         for(int i = 0; i < obs_traj_n + 1; i++){
@@ -324,9 +325,9 @@ namespace DynamicPlanning {
         for (int qi = 0; qi < multisim_qn; qi++) {
             Agent agent = default_agent;
             agent.id = qi;
-            octomap::point3d start_point(circle_radius * std::cos(qi * 2 * PI / multisim_qn),
+            point_t start_point(circle_radius * std::cos(qi * 2 * PI / multisim_qn),
                                          circle_radius * std::sin(qi * 2 * PI / multisim_qn),
-                                         z_2d);
+                                z_2d);
             agent.start_position = start_point;
             agent.desired_goal_position = -start_point;
             agent.desired_goal_position.z() = z_2d;

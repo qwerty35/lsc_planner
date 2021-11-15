@@ -66,8 +66,8 @@ namespace DynamicPlanning {
         nh.param<bool>("obs/agent_clustering", obs_agent_clustering, false);
 
         // Trajectory representation
-        nh.param<double>("traj/dt", dt, 0.5);
-        nh.param<double>("traj/horizon", horizon, 2.0);
+        nh.param<double>("traj/dt", dt, 0.2);
+        nh.param<int>("traj/M", M, 5);
         nh.param<int>("traj/n", n, 5);
         nh.param<int>("traj/phi", phi, 3);
         nh.param<int>("traj/phi_n", phi_n, 1);

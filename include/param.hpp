@@ -51,7 +51,7 @@ namespace DynamicPlanning{
 
         // Trajectory representation
         double dt;
-        double horizon;
+        int M; // the number of polynomial segment
         int n; // degree of polynomial
         int phi; // desired derivatives e.g. 3 -> minimize jerk
         int phi_n; // not used now, fix it to 1

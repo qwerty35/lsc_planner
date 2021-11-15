@@ -48,15 +48,12 @@ namespace DynamicPlanning {
     GridBasedPlanner::GridBasedPlanner(const std::shared_ptr<DynamicEDTOctomap>& _distmap_obj,
                                        const DynamicPlanning::Mission &_mission,
                                        const DynamicPlanning::Param &_param)
-                                       : distmap_obj(_distmap_obj), mission(_mission), param(_param) {}
+                                       : distmap_ptr(_distmap_obj), mission(_mission), param(_param) {}
 
-    path_t GridBasedPlanner::plan(const octomap::point3d& current_position,
-                                  const octomap::point3d& goal_position,
-                                  int agent_id,
-                                  double agent_radius,
-                                  double agent_downwash,
-                                  const std::vector<dynamic_msgs::Obstacle>& obstacles,
-                                  const std::set<int>& high_priority_obstacle_ids)
+    points_t GridBasedPlanner::plan(const point_t& current_position, const point_t& goal_position,
+                                    int agent_id, double agent_radius, double agent_downwash,
+                                    const std::vector<Obstacle>& obstacles,
+                                    const std::set<int>& high_priority_obstacle_ids)
     {
         updateGridInfo(current_position, agent_radius);
         updateGridMap(current_position, obstacles, agent_radius, agent_downwash, high_priority_obstacle_ids);
@@ -67,7 +64,7 @@ namespace DynamicPlanning {
         return plan_result.path;
     }
 
-    void GridBasedPlanner::updateGridInfo(const octomap::point3d& current_position, double agent_radius){
+    void GridBasedPlanner::updateGridInfo(const point_t& current_position, double agent_radius){
         double grid_resolution = param.grid_resolution;
         for(int i = 0; i < 3; i++) {
 //            grid_info.grid_min[i] = current_position(i) -
@@ -89,8 +86,8 @@ namespace DynamicPlanning {
         }
     }
 
-    void GridBasedPlanner::updateGridMap(const octomap::point3d& current_position,
-                                         const std::vector<dynamic_msgs::Obstacle>& obstacles,
+    void GridBasedPlanner::updateGridMap(const point_t& current_position,
+                                         const std::vector<Obstacle>& obstacles,
                                          double agent_radius,
                                          double agent_downwash,
                                          const std::set<int>& high_priority_obstacle_ids) {
@@ -107,14 +104,20 @@ namespace DynamicPlanning {
         }
 
         // Update distmap to gridmap
-        if(distmap_obj != nullptr) {
-            float grid_margin = param.grid_margin;
+        if(distmap_ptr != nullptr) {
+
             for (int i = 0; i < grid_info.dim[0]; i++) {
                 for (int j = 0; j < grid_info.dim[1]; j++) {
                     for (int k = 0; k < grid_info.dim[2]; k++) {
-                        octomap::point3d point = gridVectorToPoint3D(GridVector(i, j, k));
-                        float dist = distmap_obj->getDistance(point);
-                        if (dist < agent_radius + grid_margin) {
+                        float dist;
+                        point_t search_point, closest_point;
+                        search_point = gridVectorToPoint3D(GridVector(i, j, k));
+                        distmap_ptr->getDistanceAndClosestObstacle(search_point, dist, closest_point);
+
+                        // Due to numerical error of getDistance function, explicitly compute distance to obstacle
+                        double dist_to_obs = search_point.distance(closest_point);
+
+                        if (dist_to_obs < agent_radius + param.grid_margin) {
                             grid_map.grid[i][j][k] = GP_OCCUPIED;
                         }
                     }
@@ -126,40 +129,13 @@ namespace DynamicPlanning {
         int N_obs = obstacles.size();
         double grid_resolution = param.grid_resolution;
         for (int oi = 0; oi < N_obs; oi++) {
-            obs_i = (int) round((obstacles[oi].pose.position.x - grid_info.grid_min[0] + SP_EPSILON) / grid_resolution);
-            obs_j = (int) round((obstacles[oi].pose.position.y - grid_info.grid_min[1] + SP_EPSILON) / grid_resolution);
+            obs_i = (int) round((obstacles[oi].position.x() - grid_info.grid_min[0] + SP_EPSILON) / grid_resolution);
+            obs_j = (int) round((obstacles[oi].position.y() - grid_info.grid_min[1] + SP_EPSILON) / grid_resolution);
             if(param.world_dimension != 2){
-                obs_k = (int) round((obstacles[oi].pose.position.z - grid_info.grid_min[2] + SP_EPSILON) / grid_resolution);
+                obs_k = (int) round((obstacles[oi].position.z() - grid_info.grid_min[2] + SP_EPSILON) / grid_resolution);
             }
 
-            if (obstacles[oi].type == ObstacleType::STATICOBSTACLE) {
-                // Update static obstacle to gridmap
-                int size_x, size_y, size_z = 0;
-                size_x = ceil((agent_radius + obstacles[oi].dimensions[0]) / grid_resolution);
-                size_y = ceil((agent_radius + obstacles[oi].dimensions[1]) / grid_resolution);
-                if(param.world_dimension != 2){
-                    size_z = ceil((agent_radius + obstacles[oi].dimensions[2]) / grid_resolution);
-                }
-
-                octomap::point3d current_point, closest_point_obs;
-                for (int i = std::max(obs_i - size_x, 0); i <= std::min(obs_i + size_x, grid_info.dim[0] - 1); i++) {
-                    for (int j = std::max(obs_j - size_y, 0); j <= std::min(obs_j + size_y, grid_info.dim[1] - 1); j++) {
-                        for (int k = std::max(obs_k - size_z, 0); k <= std::min(obs_k + size_z, grid_info.dim[2] - 1); k++) {
-                            current_point = gridVectorToPoint3D(GridVector(i,j,k), param.world_dimension);
-                            ClosestPoints closest_points;
-                            closest_points = closestPointsBetweenPointAndStaticObs(current_point, obstacles[oi],
-                                                                                   param.world_dimension,
-                                                                                   param.world_z_2d);
-                            closest_point_obs = closest_points.closest_point2;
-                            double dist = (closest_point_obs - current_point).norm();
-                            if (dist < agent_radius + SP_EPSILON_FLOAT) {
-                                grid_map.grid[i][j][k] = GP_OCCUPIED;
-                            }
-                        }
-                    }
-                }
-            }
-            else if(obstacles[oi].type == ObstacleType::AGENT){
+            if(obstacles[oi].type == ObstacleType::AGENT){
                 // Update higher priority agent as an obstacle to gridmap
                 if(not isElementInSet(high_priority_obstacle_ids, (int)obstacles[oi].id)){
                     continue;
@@ -177,10 +153,9 @@ namespace DynamicPlanning {
                 for (int i = std::max(obs_i - size_xy, 0); i <= std::min(obs_i + size_xy, grid_info.dim[0] - 1); i++) {
                     for (int j = std::max(obs_j - size_xy, 0); j <= std::min(obs_j + size_xy, grid_info.dim[1] - 1); j++) {
                         for (int k = std::max(obs_k - size_z, 0); k <= std::min(obs_k + size_z, grid_info.dim[2] - 1); k++) {
-                            octomap::point3d point = gridVectorToPoint3D(GridVector(i, j, k));
-                            dist = sqrt(pow(point.x() - obstacles[oi].pose.position.x, 2) +
-                                        pow(point.y() - obstacles[oi].pose.position.y, 2) +
-                                        pow((point.z() - obstacles[oi].pose.position.z) / downwash_total, 2));
+                            point_t point = gridVectorToPoint3D(GridVector(i, j, k));
+
+                            dist = ellipsoidalDistance(point, obstacles[oi].position, downwash_total);
                             if (dist < agent_radius + obstacles[oi].radius) {
                                 grid_map.grid[i][j][k] = GP_OCCUPIED;
                             }
@@ -194,8 +169,8 @@ namespace DynamicPlanning {
         }
     }
 
-    void GridBasedPlanner::updateGridMission(const octomap::point3d& current_position,
-                                             const octomap::point3d& goal_position,
+    void GridBasedPlanner::updateGridMission(const point_t& current_position,
+                                             const point_t& goal_position,
                                              int agent_id)
     {
         grid_mission.start_point = point3DToGridVector(current_position);
@@ -294,31 +269,31 @@ namespace DynamicPlanning {
         return grid_path;
     }
 
-    path_t GridBasedPlanner::gridPathToPath(const gridpath_t& grid_path) const{
-        path_t path;
+    points_t GridBasedPlanner::gridPathToPath(const gridpath_t& grid_path) const{
+        points_t path;
         for(auto& grid_point : grid_path){
             path.emplace_back(gridVectorToPoint3D(grid_point));
         }
         return path;
     }
 
-    octomap::point3d GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector) const{
+    point_t GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector) const{
         double grid_resolution = param.grid_resolution;
-        return octomap::point3d(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
-                                grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
-                                grid_info.grid_min[2] + grid_vector[2] * grid_resolution);
+        return point_t(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
+                       grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
+                       grid_info.grid_min[2] + grid_vector[2] * grid_resolution);
     }
 
-    octomap::point3d GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const{
+    point_t GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const{
         double grid_resolution = param.grid_resolution;
-        octomap::point3d point;
+        point_t point;
         if(dimension == 2) {
-            point = octomap::point3d(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
+            point = point_t(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
                                      grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
                                      param.world_z_2d);
         }
         else {
-            point = octomap::point3d(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
+            point = point_t(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
                                      grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
                                      grid_info.grid_min[2] + grid_vector[2] * grid_resolution);
         }
@@ -326,15 +301,15 @@ namespace DynamicPlanning {
         return point;
     }
 
-    GridVector GridBasedPlanner::point3DToGridVector(const octomap::point3d& point) const{
+    GridVector GridBasedPlanner::point3DToGridVector(const point_t& point) const{
         double grid_resolution = param.grid_resolution;
         return GridVector((int) round((point.x() - grid_info.grid_min[0]) / grid_resolution),
                           (int) round((point.y() - grid_info.grid_min[1]) / grid_resolution),
                           (int) round((point.z() - grid_info.grid_min[2]) / grid_resolution));
     }
 
-    std::vector<octomap::point3d> GridBasedPlanner::getFreeGridPoints(){
-        std::vector<octomap::point3d> free_grid_points;
+    points_t GridBasedPlanner::getFreeGridPoints(){
+        points_t free_grid_points;
         for (int i = 0; i < grid_info.dim[0]; i++) {
             for (int j = 0; j < grid_info.dim[1]; j++) {
                 for (int k = 0; k < grid_info.dim[2]; k++) {
@@ -347,17 +322,17 @@ namespace DynamicPlanning {
         return free_grid_points;
     }
 
-    octomap::point3d GridBasedPlanner::findLOSFreeGoal(const octomap::point3d& current_position,
-                                                       const octomap::point3d& goal_position,
-                                                       const std::vector<dynamic_msgs::Obstacle>& obstacles,
+    point_t GridBasedPlanner::findLOSFreeGoal(const point_t& current_position,
+                                                       const point_t& goal_position,
+                                                       const std::vector<Obstacle>& obstacles,
                                                        double agent_radius,
-                                                       const std::vector<octomap::point3d>& additional_check_positions) {
-        octomap::point3d los_free_goal = current_position;
+                                                       const points_t& additional_check_positions) {
+        point_t los_free_goal = current_position;
 
-        path_t path = plan_result.path;
+        points_t path = plan_result.path;
         path.emplace_back(goal_position);
 
-        std::vector<octomap::point3d> start_positions = additional_check_positions;
+        points_t start_positions = additional_check_positions;
         start_positions.emplace_back(current_position);
 
         for (int i = 0; i < 6; i++) {
@@ -365,18 +340,7 @@ namespace DynamicPlanning {
             for (const auto &point : path) {
                 bool is_safe = true;
                 for (const auto &start_position: start_positions) {
-                    for (const auto &obstacle : obstacles) {
-                        if (obstacle.type == ObstacleType::STATICOBSTACLE) {
-                            if (checkCollisionBetweenLineSegmentAndBox(obstacle,
-                                                                       start_position, point,
-                                                                       agent_radius, param.world_dimension)) {
-                                is_safe = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (is_safe and distmap_obj != nullptr) {
+                    if (is_safe and distmap_ptr != nullptr) {
                         is_safe = castRay(start_position, point, agent_radius * margin_ratio);
                     }
 
@@ -398,7 +362,7 @@ namespace DynamicPlanning {
             }
         }
 
-        octomap::point3d delta = los_free_goal - current_position;
+        point_t delta = los_free_goal - current_position;
         if(delta.norm() > param.goal_radius){
             los_free_goal = current_position + delta.normalized() * param.goal_radius;
         }
@@ -406,16 +370,16 @@ namespace DynamicPlanning {
         return los_free_goal;
     }
 
-    bool GridBasedPlanner::castRay(const octomap::point3d& current_position,
-                                   const octomap::point3d& goal_position,
+    bool GridBasedPlanner::castRay(const point_t& current_position,
+                                   const point_t& goal_position,
                                    double agent_radius)
     {
         double safe_dist_curr, safe_dist_goal, dist_to_goal, dist_threshold;
         double max_dist = 1.0; //TODO: parameterization
         dist_to_goal = (current_position - goal_position).norm();
         dist_threshold = sqrt(0.25 * dist_to_goal * dist_to_goal + agent_radius * agent_radius);
-        safe_dist_curr = distmap_obj->getDistance(current_position);
-        safe_dist_goal = distmap_obj->getDistance(goal_position);
+        safe_dist_curr = distmap_ptr->getDistance(current_position);
+        safe_dist_goal = distmap_ptr->getDistance(goal_position);
 
         if(safe_dist_curr < agent_radius + 0.5 * param.world_resolution - SP_EPSILON_FLOAT){
             return false;
@@ -427,7 +391,7 @@ namespace DynamicPlanning {
             return true;
         }
 
-        octomap::point3d mid_position = (current_position + goal_position) * 0.5;
+        point_t mid_position = (current_position + goal_position) * 0.5;
         return castRay(current_position, mid_position, agent_radius)
                && castRay(mid_position, goal_position, agent_radius);
     }

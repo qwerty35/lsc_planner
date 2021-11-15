@@ -166,13 +166,14 @@ namespace DynamicPlanning {
                 mk_obs_true_position.pose.position.y = obstacles[oi].pose.position.y;
                 mk_obs_true_position.pose.position.z = obstacles[oi].pose.position.z;
 
-                if(mission.obstacles[oi]->getType() == "static"){
-                    mk_obs_true_position.type = visualization_msgs::Marker::CUBE;
-                    mk_obs_true_position.scale.x = 2 * obstacles[oi].dimensions[0];
-                    mk_obs_true_position.scale.y = 2 * obstacles[oi].dimensions[1];
-                    mk_obs_true_position.scale.z = 2 * obstacles[oi].dimensions[2];
-                }
-                else{
+//                if(mission.obstacles[oi]->getType() == "static"){
+//                    mk_obs_true_position.type = visualization_msgs::Marker::CUBE;
+//                    mk_obs_true_position.scale.x = 2 * obstacles[oi].dimensions[0];
+//                    mk_obs_true_position.scale.y = 2 * obstacles[oi].dimensions[1];
+//                    mk_obs_true_position.scale.z = 2 * obstacles[oi].dimensions[2];
+//                }
+//                else
+                {
                     mk_obs_true_position.type = visualization_msgs::Marker::SPHERE;
                     mk_obs_true_position.scale.x = 2 * obstacles[oi].radius;
                     mk_obs_true_position.scale.y = 2 * obstacles[oi].radius;

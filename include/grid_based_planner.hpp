@@ -31,16 +31,16 @@ namespace DynamicPlanning {
         GridVector operator-() const;
         bool operator== (const GridVector &other_node) const;
         bool operator< (const GridVector &other_node) const;
-        int dot(const GridVector& other_agent) const;
-        double norm() const;
+        [[nodiscard]] int dot(const GridVector& other_agent) const;
+        [[nodiscard]] double norm() const;
 
-        int i() const { return data[0]; }
-        int j() const { return data[1]; }
-        int k() const { return data[2]; }
+        [[nodiscard]] int i() const { return data[0]; }
+        [[nodiscard]] int j() const { return data[1]; }
+        [[nodiscard]] int k() const { return data[2]; }
         int& operator[](unsigned int idx) { return data[idx]; }
         const int& operator[](unsigned int idx) const { return data[idx]; }
 
-        std::array<int,3> toArray() const { return data; }
+        [[nodiscard]] std::array<int,3> toArray() const { return data; }
 
     private:
         std::array<int,3> data{-1,-1,-1};
@@ -69,11 +69,10 @@ namespace DynamicPlanning {
         GridVector goal_point;
     };
 
-    typedef std::vector<octomap::point3d> path_t;
     typedef std::vector<GridVector> gridpath_t;
 
     struct PlanResult{
-        path_t path;
+        points_t path;
         gridpath_t grid_path;
     };
 
@@ -83,28 +82,28 @@ namespace DynamicPlanning {
                          const DynamicPlanning::Mission &_mission,
                          const DynamicPlanning::Param &_param);
 
-        path_t plan(const octomap::point3d& current_position,
-                    const octomap::point3d& goal_position,
-                    int agent_id,
-                    double agent_radius,
-                    double agent_downwash,
-                    const std::vector<dynamic_msgs::Obstacle>& obstacles = {},
-                    const std::set<int>& high_priority_obstacle_ids = {});
+        points_t plan(const point_t& current_position,
+                      const point_t& goal_position,
+                      int agent_id,
+                      double agent_radius,
+                      double agent_downwash,
+                      const std::vector<Obstacle>& obstacles = {},
+                      const std::set<int>& high_priority_obstacle_ids = {});
 
         // Getter
-        std::vector<octomap::point3d> getFreeGridPoints();
+        points_t getFreeGridPoints();
 
         // Goal
-        octomap::point3d findLOSFreeGoal(const octomap::point3d& current_position,
-                                         const octomap::point3d& goal_position,
-                                         const std::vector<dynamic_msgs::Obstacle>& obstacles,
-                                         double agent_radius,
-                                         const std::vector<octomap::point3d>& additional_check_positions = {});
+        point_t findLOSFreeGoal(const point_t& current_position,
+                                const point_t& goal_position,
+                                const std::vector<Obstacle>& obstacles,
+                                double agent_radius,
+                                const points_t& additional_check_positions = {});
 
     private:
         Mission mission;
         Param param;
-        std::shared_ptr<DynamicEDTOctomap> distmap_obj;
+        std::shared_ptr<DynamicEDTOctomap> distmap_ptr;
 
         GridInfo grid_info{};
         GridMap grid_map;
@@ -112,16 +111,16 @@ namespace DynamicPlanning {
 
         PlanResult plan_result;
 
-        void updateGridInfo(const octomap::point3d& current_position, double agent_radius);
+        void updateGridInfo(const point_t& current_position, double agent_radius);
 
-        void updateGridMap(const octomap::point3d& current_position,
-                           const std::vector<dynamic_msgs::Obstacle>& obstacles,
+        void updateGridMap(const point_t& current_position,
+                           const std::vector<Obstacle>& obstacles,
                            double agent_radius,
                            double agent_downwash,
                            const std::set<int>& high_priority_obstacle_ids = {});
 
-        void updateGridMission(const octomap::point3d& current_position,
-                               const octomap::point3d& goal_position,
+        void updateGridMission(const point_t& current_position,
+                               const point_t& goal_position,
                                int agent_id);
 
         bool isValid(const GridVector& grid_node);
@@ -132,16 +131,15 @@ namespace DynamicPlanning {
 
         static gridpath_t planAstar(const GridMap& grid_map, const GridMission& grid_mission);
 
-        path_t gridPathToPath(const gridpath_t& grid_path) const;
+        [[nodiscard]] points_t gridPathToPath(const gridpath_t& grid_path) const;
 
-        octomap::point3d gridVectorToPoint3D(const GridVector& grid_vector) const;
+        [[nodiscard]]point_t gridVectorToPoint3D(const GridVector& grid_vector) const;
 
-        octomap::point3d gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const;
+        [[nodiscard]] point_t gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const;
 
-        GridVector point3DToGridVector(const octomap::point3d& point) const;
+        [[nodiscard]] GridVector point3DToGridVector(const point_t& point) const;
 
-        bool castRay(const octomap::point3d& current_position, const octomap::point3d& goal_position,
-                     double agent_radius);
+        bool castRay(const point_t& current_position, const point_t& goal_position, double agent_radius);
     };
 }
 

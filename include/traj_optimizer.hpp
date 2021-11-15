@@ -19,22 +19,14 @@ namespace DynamicPlanning {
     public:
         TrajOptimizer(const Param& param, const Mission& mission, const Eigen::MatrixXd& B);
 
-        void solve(const Agent& agent, const CollisionConstraints& constraints);
+        traj_t solve(const Agent& agent, const CollisionConstraints& constraints, double& qp_cost);
 
         void updateParam(const Param& param);
-
-        traj_t getTrajectory();
-
-        double getQPcost() const;
 
     private:
         Param param;
         Mission mission;
         Eigen::MatrixXd Q_base, Aeq_base, deq, B;
-
-        // trajectory optimization results
-        traj_t trajectory;
-        double current_qp_cost;
 
         // Frequently used constants
         int M, n, phi, dim;

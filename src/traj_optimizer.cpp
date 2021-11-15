@@ -6,17 +6,11 @@ namespace DynamicPlanning {
     {
         // Initialize trajectory param, offsets
         dim = param.world_dimension;
-        M = static_cast<int>((param.horizon + SP_EPSILON) / param.dt);
+        M = param.M;
         n = param.n;
         phi = param.phi;
         if (param.N_constraint_segments < 0) {
             param.N_constraint_segments = M;
-        }
-
-        // Initialize trajectory
-        trajectory.resize(M);
-        for(int m = 0; m < M; m++){
-            trajectory[m].resize(n + 1);
         }
 
         // Build constraint matrices
@@ -28,7 +22,15 @@ namespace DynamicPlanning {
         buildDeq(agent);
     }
 
-    void TrajOptimizer::solve(const Agent& agent, const CollisionConstraints& constraints){
+    traj_t TrajOptimizer::solve(const Agent& agent, const CollisionConstraints& constraints, double& qp_cost){
+        // Initialize trajectory
+        traj_t trajectory;
+        trajectory.resize(M);
+        for(int m = 0; m < M; m++){
+            trajectory[m].resize(n + 1);
+        }
+        qp_cost = SP_INFINITY;
+
         // Construct constraint matrix
         buildConstraintMatrices(agent);
 
@@ -45,7 +47,6 @@ namespace DynamicPlanning {
         else{
             cplex.setParam(IloCplex::Param::Threads, 10);
         }
-
 
         // Set CPLEX algorithm
 //        cplex.setParam(IloCplex::Param::TimeLimit, 0.02);
@@ -81,19 +82,17 @@ namespace DynamicPlanning {
             for (int m = 0; m < M; m++) {
                 for (int i = 0; i < n + 1; i++) {
                     if (dim == 3) {
-                        trajectory[m][i] = octomap::point3d(vals[0 * offset_dim + m * offset_seg + i],
-                                                            vals[1 * offset_dim + m * offset_seg + i],
-                                                            vals[2 * offset_dim + m * offset_seg + i]);
-                    } else if (dim == 2) {
-                        trajectory[m][i] = octomap::point3d(vals[0 * offset_dim + m * offset_seg + i],
-                                                            vals[1 * offset_dim + m * offset_seg + i],
-                                                            param.world_z_2d);
+                        trajectory[m][i] = point_t(vals[0 * offset_dim + m * offset_seg + i],
+                                                   vals[1 * offset_dim + m * offset_seg + i],
+                                                   vals[2 * offset_dim + m * offset_seg + i]);
                     } else {
-                        throw std::invalid_argument("[TrajOptimizer] Invalid simulation dimension");
+                        trajectory[m][i] = point_t(vals[0 * offset_dim + m * offset_seg + i],
+                                                   vals[1 * offset_dim + m * offset_seg + i],
+                                                   param.world_z_2d);
                     }
                 }
             }
-            current_qp_cost = cplex.getObjValue();
+            qp_cost = cplex.getObjValue();
             env.end();
         }
         catch (IloException &e) {
@@ -151,18 +150,12 @@ namespace DynamicPlanning {
             //TODO: find better exception
             throw PlanningReport::QPFAILED;
         }
+
+        return trajectory;
     }
 
     void TrajOptimizer::updateParam(const Param& _param){
         param = _param;
-    }
-
-    traj_t TrajOptimizer::getTrajectory(){
-        return trajectory;
-    }
-
-    double TrajOptimizer::getQPcost() const{
-        return current_qp_cost;
     }
 
     // Cost matrix Q
@@ -260,7 +253,8 @@ namespace DynamicPlanning {
 
     void TrajOptimizer::populatebyrow(IloModel model, IloNumVarArray x, IloRangeArray c,
                                       const Agent& agent, const CollisionConstraints& constraints) {
-        int offset_slack, offset_dim, offset_seg, N_obs;
+        int offset_slack, offset_dim, offset_seg;
+        size_t N_obs;
         offset_slack = dim * M * (n + 1);
         offset_dim = M * (n + 1);
         offset_seg = n + 1;

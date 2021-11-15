@@ -83,15 +83,15 @@ namespace DynamicPlanning{
             } else {
                 for (int qi = 0; qi < mission.qn; qi++) {
                     State state;
-                    state.position = octomap::point3d(std::stod(row[offset_agent * qi + 2]),
-                                                      std::stod(row[offset_agent * qi + 3]),
-                                                      std::stod(row[offset_agent * qi + 4]));
-                    state.velocity = octomap::point3d(std::stod(row[offset_agent * qi + 5]),
-                                                      std::stod(row[offset_agent * qi + 6]),
-                                                      std::stod(row[offset_agent * qi + 7]));
-                    state.acceleration = octomap::point3d(std::stod(row[offset_agent * qi + 8]),
-                                                          std::stod(row[offset_agent * qi + 9]),
-                                                          std::stod(row[offset_agent * qi + 10]));
+                    state.position = point_t(std::stod(row[offset_agent * qi + 2]),
+                                             std::stod(row[offset_agent * qi + 3]),
+                                             std::stod(row[offset_agent * qi + 4]));
+                    state.velocity = point_t(std::stod(row[offset_agent * qi + 5]),
+                                             std::stod(row[offset_agent * qi + 6]),
+                                             std::stod(row[offset_agent * qi + 7]));
+                    state.acceleration = point_t(std::stod(row[offset_agent * qi + 8]),
+                                                 std::stod(row[offset_agent * qi + 9]),
+                                                 std::stod(row[offset_agent * qi + 10]));
                     agent_state_history[qi].emplace_back(state);
 
 //                    safety_margin_to_agents_history[qi].emplace_back(std::stod(row[offset_agent * qi + 14]));
@@ -145,9 +145,9 @@ namespace DynamicPlanning{
             double alpha = t/timeStep - idx;
             geometry_msgs::Point current_point;
             if(idx < agent_state_history[qi].size() - 1){
-                octomap::point3d p1 = agent_state_history[qi][idx].position;
-                octomap::point3d p2 = agent_state_history[qi][idx + 1].position;
-                octomap::point3d p_new = p1 * (1.0 - alpha) + p2 * alpha;
+                point_t p1 = agent_state_history[qi][idx].position;
+                point_t p2 = agent_state_history[qi][idx + 1].position;
+                point_t p_new = p1 * (1.0 - alpha) + p2 * alpha;
                 current_point = point3DToPointMsg(p_new);
             }
             else{
@@ -178,9 +178,9 @@ namespace DynamicPlanning{
             double alpha = t/timeStep - idx;
             geometry_msgs::Point current_point;
             if(idx < obstacle_state_history[oi].size() - 1){
-                octomap::point3d p1 = obstacle_state_history[oi][idx].position;
-                octomap::point3d p2 = obstacle_state_history[oi][idx + 1].position;
-                octomap::point3d p_new = p1 * (1.0 - alpha) + p2 * alpha;
+                point_t p1 = obstacle_state_history[oi][idx].position;
+                point_t p2 = obstacle_state_history[oi][idx + 1].position;
+                point_t p_new = p1 * (1.0 - alpha) + p2 * alpha;
                 current_point = point3DToPointMsg(p_new);
             }
 
@@ -405,9 +405,9 @@ namespace DynamicPlanning{
             double alpha = t/timeStep - idx;
             geometry_msgs::Point current_point;
             if(idx < agent_state_history[qi].size() - 1){
-                octomap::point3d current_velocity = agent_state_history[qi][idx].velocity * (1.0 - alpha)
+                point_t current_velocity = agent_state_history[qi][idx].velocity * (1.0 - alpha)
                                                     + agent_state_history[qi][idx + 1].velocity * alpha;
-                octomap::point3d current_acceleration = agent_state_history[qi][idx].acceleration * (1.0 - alpha)
+                point_t current_acceleration = agent_state_history[qi][idx].acceleration * (1.0 - alpha)
                                                         + agent_state_history[qi][idx + 1].acceleration * alpha;
 
                 msg_agent_velocities_x.data[qi] = current_velocity.x();

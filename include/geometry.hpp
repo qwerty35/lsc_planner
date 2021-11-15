@@ -2,26 +2,26 @@
 #include <openGJK/openGJK.hpp>
 
 namespace DynamicPlanning{
-    static bool isPointInStaticObs(octomap::point3d p, const dynamic_msgs::Obstacle& obstacle, int dimension){
-        bool ret = p.x() > (obstacle.pose.position.x - obstacle.dimensions[0]) - SP_EPSILON_FLOAT and
-                   p.x() < (obstacle.pose.position.x + obstacle.dimensions[0]) + SP_EPSILON_FLOAT and
-                   p.y() > (obstacle.pose.position.y - obstacle.dimensions[1]) - SP_EPSILON_FLOAT and
-                   p.y() < (obstacle.pose.position.y + obstacle.dimensions[1]) + SP_EPSILON_FLOAT;
+//    static bool isPointInStaticObs(point_t p, const dynamic_msgs::Obstacle& obstacle, int dimension){
+//        bool ret = p.x() > (obstacle.pose.position.x - obstacle.dimensions[0]) - SP_EPSILON_FLOAT and
+//                   p.x() < (obstacle.pose.position.x + obstacle.dimensions[0]) + SP_EPSILON_FLOAT and
+//                   p.y() > (obstacle.pose.position.y - obstacle.dimensions[1]) - SP_EPSILON_FLOAT and
+//                   p.y() < (obstacle.pose.position.y + obstacle.dimensions[1]) + SP_EPSILON_FLOAT;
+//
+//        if(dimension == 2){
+//            return ret;
+//        }
+//        else{
+//            return ret and
+//                   p.z() > (obstacle.pose.position.z - obstacle.dimensions[2]) - SP_EPSILON_FLOAT and
+//                   p.z() < (obstacle.pose.position.z + obstacle.dimensions[2]) + SP_EPSILON_FLOAT;
+//        }
+//    }
 
-        if(dimension == 2){
-            return ret;
-        }
-        else{
-            return ret and
-                   p.z() > (obstacle.pose.position.z - obstacle.dimensions[2]) - SP_EPSILON_FLOAT and
-                   p.z() < (obstacle.pose.position.z + obstacle.dimensions[2]) + SP_EPSILON_FLOAT;
-        }
-    }
-
-    static ClosestPoints closestPointsBetweenPointAndLine(const octomap::point3d& point,
-                                                          const octomap::point3d& line_point,
-                                                          const octomap::point3d& line_direction){
-        octomap::point3d a, c, line_closest_point;
+    static ClosestPoints closestPointsBetweenPointAndLine(const point_t& point,
+                                                          const point_t& line_point,
+                                                          const point_t& line_direction){
+        point_t a, c, line_closest_point;
         a = line_point - point;
         c = a - line_direction * a.dot(line_direction);
         line_closest_point = point + c;
@@ -34,12 +34,12 @@ namespace DynamicPlanning{
         return closest_points;
     }
 
-    static ClosestPoints closestPointsBetweenPointAndRay(const octomap::point3d& point,
-                                                         const octomap::point3d& ray_start,
-                                                         const octomap::point3d& ray_direction){
+    static ClosestPoints closestPointsBetweenPointAndRay(const point_t& point,
+                                                         const point_t& ray_start,
+                                                         const point_t& ray_direction){
         ClosestPoints closest_points;
 
-        octomap::point3d delta_to_start, ray_closest_point;
+        point_t delta_to_start, ray_closest_point;
         delta_to_start = point - ray_start;
         if(delta_to_start.dot(ray_direction) < 0){
             closest_points.dist = delta_to_start.norm();
@@ -54,10 +54,10 @@ namespace DynamicPlanning{
     }
 
 //closest_point: closest point in line
-    static ClosestPoints closestPointsBetweenPointAndLineSegment(const octomap::point3d& point,
-                                                                 const octomap::point3d& line_start,
-                                                                 const octomap::point3d& line_goal){
-        octomap::point3d a, b, c, n_line, rel_closest_point;
+    static ClosestPoints closestPointsBetweenPointAndLineSegment(const point_t& point,
+                                                                 const point_t& line_start,
+                                                                 const point_t& line_goal){
+        point_t a, b, c, n_line, rel_closest_point;
         double dist, dist_min;
         a = line_start - point;
         b = line_goal - point;
@@ -93,15 +93,15 @@ namespace DynamicPlanning{
     }
 
 // find min((line1_start + alpha(line1_goal-line1_start) - (line2_start + alpha(line2_goal-line2_start)))
-    static ClosestPoints closestPointsBetweenLinePaths(const octomap::point3d& line1_start,
-                                                       const octomap::point3d& line1_goal,
-                                                       const octomap::point3d& line2_start,
-                                                       const octomap::point3d& line2_goal)
+    static ClosestPoints closestPointsBetweenLinePaths(const point_t& line1_start,
+                                                       const point_t& line1_goal,
+                                                       const point_t& line2_start,
+                                                       const point_t& line2_goal)
     {
-        octomap::point3d rel_path_start, rel_path_goal, origin;
+        point_t rel_path_start, rel_path_goal, origin;
         rel_path_start = line2_start - line1_start;
         rel_path_goal = line2_goal - line1_goal;
-        origin = octomap::point3d(0, 0, 0);
+        origin = point_t(0, 0, 0);
 
         ClosestPoints rel_closest_points, closest_points;
         double alpha, line2_length;
@@ -121,10 +121,10 @@ namespace DynamicPlanning{
     }
 
 //TODO: change line_start, line_goal to line_point, line_direction
-    static ClosestPoints closestPointsBetweenLines(const octomap::point3d& line1_start,
-                                                   const octomap::point3d& line1_goal,
-                                                   const octomap::point3d& line2_start,
-                                                   const octomap::point3d& line2_goal)
+    static ClosestPoints closestPointsBetweenLines(const point_t& line1_start,
+                                                   const point_t& line1_goal,
+                                                   const point_t& line2_start,
+                                                   const point_t& line2_goal)
     {
         if(line1_start == line1_goal){
             throw std::invalid_argument("[Geometry] Invalid input for distance between lines, line1 start and goal is same");
@@ -136,7 +136,7 @@ namespace DynamicPlanning{
         ClosestPoints closest_points;
 
         // get closest point of line segment(a->b) from origin
-        octomap::point3d n1, n2, n3, delta;
+        point_t n1, n2, n3, delta;
         n1 = (line1_goal - line1_start).normalized();
         n2 = (line2_goal - line2_start).normalized();
         if(n1 == n2 or n1 == -n2){
@@ -169,10 +169,10 @@ namespace DynamicPlanning{
         return closest_points;
     }
 
-    static ClosestPoints closestPointsBetweenLineSegments(const octomap::point3d& line1_start,
-                                                          const octomap::point3d& line1_goal,
-                                                          const octomap::point3d& line2_start,
-                                                          const octomap::point3d& line2_goal)
+    static ClosestPoints closestPointsBetweenLineSegments(const point_t& line1_start,
+                                                          const point_t& line1_goal,
+                                                          const point_t& line2_start,
+                                                          const point_t& line2_goal)
     {
         ClosestPoints closest_point, closest_point_cand;
         closest_point.dist = SP_INFINITY;
@@ -209,7 +209,7 @@ namespace DynamicPlanning{
             // skip
         }
         else{
-            octomap::point3d n1, n2;
+            point_t n1, n2;
             n1 = (line1_goal - line1_start).normalized();
             n2 = (line2_goal - line2_start).normalized();
             if(n1 == n2 or n1 == -n2){
@@ -234,135 +234,135 @@ namespace DynamicPlanning{
         return closest_point;
     }
 
-    static lines_t getEdgesFromStaticObs(const dynamic_msgs::Obstacle& obstacle, int dimension, double z_2d = 1.0){
-        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
-            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
-        }
+//    static lines_t getEdgesFromStaticObs(const dynamic_msgs::Obstacle& obstacle, int dimension, double z_2d = 1.0){
+//        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
+//            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
+//        }
+//
+//        lines_t edges;
+//        std::array<double, 2> x_bound, y_bound, z_bound;
+//        x_bound = {obstacle.pose.position.x - obstacle.dimensions[0],
+//                   obstacle.pose.position.x + obstacle.dimensions[0]};
+//        y_bound = {obstacle.pose.position.y - obstacle.dimensions[1],
+//                   obstacle.pose.position.y + obstacle.dimensions[1]};
+//        if(dimension == 2){
+//            z_bound = {z_2d, z_2d};
+//        }
+//        else{
+//            z_bound = {obstacle.pose.position.z - obstacle.dimensions[2],
+//                       obstacle.pose.position.z + obstacle.dimensions[2]};
+//        }
+//
+//        // find edges
+//        point_t vertex1, vertex2;
+//        for(int i = 0; i < 2; i++){
+//            for(int j = 0; j < 2; j++){
+//                for(int k = 0; k < dimension - 1; k++){
+//                    vertex1 = point_t(x_bound[i], y_bound[j], z_bound[k]);
+//
+//                    if(i == 0){
+//                        vertex2 = point_t(x_bound[i + 1], y_bound[j], z_bound[k]);
+//                        edges.emplace_back(Line(vertex1, vertex2));
+//                    }
+//                    if(j == 0){
+//                        vertex2 = point_t(x_bound[i], y_bound[j+1], z_bound[k]);
+//                        edges.emplace_back(Line(vertex1, vertex2));
+//                    }
+//                    if(dimension == 3 and k == 0){
+//                        vertex2 = point_t(x_bound[i+1], y_bound[j], z_bound[k+1]);
+//                        edges.emplace_back(Line(vertex1, vertex2));
+//                    }
+//                }
+//            }
+//        }
+//
+//        return edges;
+//    }
 
-        lines_t edges;
-        std::array<double, 2> x_bound, y_bound, z_bound;
-        x_bound = {obstacle.pose.position.x - obstacle.dimensions[0],
-                   obstacle.pose.position.x + obstacle.dimensions[0]};
-        y_bound = {obstacle.pose.position.y - obstacle.dimensions[1],
-                   obstacle.pose.position.y + obstacle.dimensions[1]};
-        if(dimension == 2){
-            z_bound = {z_2d, z_2d};
-        }
-        else{
-            z_bound = {obstacle.pose.position.z - obstacle.dimensions[2],
-                       obstacle.pose.position.z + obstacle.dimensions[2]};
-        }
+//    static lines_t getInflatedEdgesFromStaticObs(const dynamic_msgs::Obstacle& obstacle, double radius,
+//                                                 int dimension, double z_2d = 1.0){
+//        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 or dimension == 3){
+//            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
+//        }
+//
+//        lines_t edges;
+//        std::array<double, 2> x_bound, y_bound;
+//        x_bound = {obstacle.pose.position.x - obstacle.dimensions[0],
+//                   obstacle.pose.position.x + obstacle.dimensions[0]};
+//        y_bound = {obstacle.pose.position.y - obstacle.dimensions[1],
+//                   obstacle.pose.position.y + obstacle.dimensions[1]};
+//
+//        // find edges
+//        point_t vertex1, vertex2;
+//        for(int i = 0; i < 2; i++){
+//            for(int j = 0; j < 2; j++){
+//                vertex1 = point_t(x_bound[i], y_bound[j], z_2d);
+//
+//                if(i == 0){
+//                    vertex2 = point_t(x_bound[i+1], y_bound[j], z_2d);
+//                    if(j == 0){
+//                        edges.emplace_back(Line(vertex2 + point_t(0, -radius, 0),
+//                                                vertex1 + point_t(0, -radius, 0)));
+//                    }
+//                    else{
+//                        edges.emplace_back(Line(vertex1 + point_t(0, radius, 0),
+//                                                vertex2 + point_t(0, radius, 0)));
+//                    }
+//                }
+//                if(j == 0){
+//                    vertex2 = point_t(x_bound[i], y_bound[j+1], z_2d);
+//                    if(i == 0){
+//                        edges.emplace_back(Line(vertex1 + point_t(-radius, 0, 0),
+//                                                vertex2 + point_t(-radius, 0, 0)));
+//                    }
+//                    else{
+//                        edges.emplace_back(Line(vertex2 + point_t(radius, 0, 0),
+//                                                vertex1 + point_t(radius, 0, 0)));
+//                    }
+//                }
+//            }
+//        }
+//
+//        return edges;
+//    }
 
-        // find edges
-        octomap::point3d vertex1, vertex2;
-        for(int i = 0; i < 2; i++){
-            for(int j = 0; j < 2; j++){
-                for(int k = 0; k < dimension - 1; k++){
-                    vertex1 = octomap::point3d(x_bound[i], y_bound[j], z_bound[k]);
+//    static ClosestPoints closestPointsBetweenPointAndStaticObs(const point_t& point,
+//                                                               const dynamic_msgs::Obstacle& obstacle,
+//                                                               int dimension, double z_2d = 1.0)
+//    {
+//        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
+//            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
+//        }
+//
+//        float x, y, z, x_min, x_max, y_min, y_max, z_min, z_max;
+//        x_min = obstacle.pose.position.x - obstacle.dimensions[0];
+//        x_max = obstacle.pose.position.x + obstacle.dimensions[0];
+//        y_min = obstacle.pose.position.y - obstacle.dimensions[1];
+//        y_max = obstacle.pose.position.y + obstacle.dimensions[1];
+//        z_min = obstacle.pose.position.z - obstacle.dimensions[2];
+//        z_max = obstacle.pose.position.z + obstacle.dimensions[2];
+//
+//        x = std::min(x_max, std::max(point.x(), x_min));
+//        y = std::min(y_max, std::max(point.y(), y_min));
+//        z = std::min(z_max, std::max(point.z(), z_min));
+//
+//        ClosestPoints closest_points;
+//        if(dimension == 2){
+//            closest_points.closest_point1 = point;
+//            closest_points.closest_point2 = point_t(x, y, z_2d);
+//            closest_points.dist = (closest_points.closest_point2 - closest_points.closest_point1).norm();
+//        }
+//        else{
+//            closest_points.closest_point1 = point;
+//            closest_points.closest_point2 = point_t(x, y, z);
+//            closest_points.dist = (closest_points.closest_point2 - closest_points.closest_point1).norm();
+//        }
+//
+//        return closest_points;
+//    }
 
-                    if(i == 0){
-                        vertex2 = octomap::point3d(x_bound[i+1], y_bound[j], z_bound[k]);
-                        edges.emplace_back(Line(vertex1, vertex2));
-                    }
-                    if(j == 0){
-                        vertex2 = octomap::point3d(x_bound[i], y_bound[j+1], z_bound[k]);
-                        edges.emplace_back(Line(vertex1, vertex2));
-                    }
-                    if(dimension == 3 and k == 0){
-                        vertex2 = octomap::point3d(x_bound[i+1], y_bound[j], z_bound[k+1]);
-                        edges.emplace_back(Line(vertex1, vertex2));
-                    }
-                }
-            }
-        }
-
-        return edges;
-    }
-
-    static lines_t getInflatedEdgesFromStaticObs(const dynamic_msgs::Obstacle& obstacle, double radius,
-                                                 int dimension, double z_2d = 1.0){
-        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 or dimension == 3){
-            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
-        }
-
-        lines_t edges;
-        std::array<double, 2> x_bound, y_bound;
-        x_bound = {obstacle.pose.position.x - obstacle.dimensions[0],
-                   obstacle.pose.position.x + obstacle.dimensions[0]};
-        y_bound = {obstacle.pose.position.y - obstacle.dimensions[1],
-                   obstacle.pose.position.y + obstacle.dimensions[1]};
-
-        // find edges
-        octomap::point3d vertex1, vertex2;
-        for(int i = 0; i < 2; i++){
-            for(int j = 0; j < 2; j++){
-                vertex1 = octomap::point3d(x_bound[i], y_bound[j], z_2d);
-
-                if(i == 0){
-                    vertex2 = octomap::point3d(x_bound[i+1], y_bound[j], z_2d);
-                    if(j == 0){
-                        edges.emplace_back(Line(vertex2 + octomap::point3d(0, -radius, 0),
-                                                vertex1 + octomap::point3d(0, -radius, 0)));
-                    }
-                    else{
-                        edges.emplace_back(Line(vertex1 + octomap::point3d(0, radius, 0),
-                                                vertex2 + octomap::point3d(0, radius, 0)));
-                    }
-                }
-                if(j == 0){
-                    vertex2 = octomap::point3d(x_bound[i], y_bound[j+1], z_2d);
-                    if(i == 0){
-                        edges.emplace_back(Line(vertex1 + octomap::point3d(-radius, 0, 0),
-                                                vertex2 + octomap::point3d(-radius, 0, 0)));
-                    }
-                    else{
-                        edges.emplace_back(Line(vertex2 + octomap::point3d(radius, 0, 0),
-                                                vertex1 + octomap::point3d(radius, 0, 0)));
-                    }
-                }
-            }
-        }
-
-        return edges;
-    }
-
-    static ClosestPoints closestPointsBetweenPointAndStaticObs(const octomap::point3d& point,
-                                                               const dynamic_msgs::Obstacle& obstacle,
-                                                               int dimension, double z_2d = 1.0)
-    {
-        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
-            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
-        }
-
-        float x, y, z, x_min, x_max, y_min, y_max, z_min, z_max;
-        x_min = obstacle.pose.position.x - obstacle.dimensions[0];
-        x_max = obstacle.pose.position.x + obstacle.dimensions[0];
-        y_min = obstacle.pose.position.y - obstacle.dimensions[1];
-        y_max = obstacle.pose.position.y + obstacle.dimensions[1];
-        z_min = obstacle.pose.position.z - obstacle.dimensions[2];
-        z_max = obstacle.pose.position.z + obstacle.dimensions[2];
-
-        x = std::min(x_max, std::max(point.x(), x_min));
-        y = std::min(y_max, std::max(point.y(), y_min));
-        z = std::min(z_max, std::max(point.z(), z_min));
-
-        ClosestPoints closest_points;
-        if(dimension == 2){
-            closest_points.closest_point1 = point;
-            closest_points.closest_point2 = octomap::point3d(x, y, z_2d);
-            closest_points.dist = (closest_points.closest_point2 - closest_points.closest_point1).norm();
-        }
-        else{
-            closest_points.closest_point1 = point;
-            closest_points.closest_point2 = octomap::point3d(x, y, z);
-            closest_points.dist = (closest_points.closest_point2 - closest_points.closest_point1).norm();
-        }
-
-        return closest_points;
-    }
-
-    static ClosestPoints closestPointsBetweenPointAndConvexHull(const octomap::point3d& point,
-                                                                const std::vector<octomap::point3d>& convex_hull){
+    static ClosestPoints closestPointsBetweenPointAndConvexHull(const point_t& point,
+                                                                const points_t& convex_hull){
         /* Squared distance computed by openGJK.                                 */
         double dd;
         /* Structure of simplex used by openGJK.                                 */
@@ -377,7 +377,7 @@ namespace DynamicPlanning{
         bd1.numpoints = static_cast<int>(convex_hull.size());
         bd1.coord = point3DsToArray(convex_hull);
 
-        std::vector<octomap::point3d> point_vector;
+        points_t point_vector;
         point_vector.emplace_back(point);
         bd2.numpoints = 1;
         bd2.coord = point3DsToArray(point_vector);
@@ -387,70 +387,70 @@ namespace DynamicPlanning{
 
         ClosestPoints closest_points;
         closest_points.closest_point1 = point;
-        closest_points.closest_point2 = point + octomap::point3d(v[0], v[1], v[2]);
+        closest_points.closest_point2 = point + point_t(v[0], v[1], v[2]);
         closest_points.dist = dd;
 
         return closest_points;
     }
 
-    static ClosestPoints closestPointsBetweenLineSegmentAndStaticObs(const octomap::point3d& start_point,
-                                                                     const octomap::point3d& goal_point,
-                                                                     const dynamic_msgs::Obstacle& obstacle,
-                                                                     int dimension, double z_2d = 1.0)
-    {
-        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
-            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
-        }
+//    static ClosestPoints closestPointsBetweenLineSegmentAndStaticObs(const point_t& start_point,
+//                                                                     const point_t& goal_point,
+//                                                                     const dynamic_msgs::Obstacle& obstacle,
+//                                                                     int dimension, double z_2d = 1.0)
+//    {
+//        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
+//            throw std::invalid_argument("[Geometry] failed to get closest point to static obstacle, Invalid obstacle");
+//        }
+//
+//        ClosestPoints closest_points;
+//        if(isPointInStaticObs(start_point, obstacle, dimension)){
+//            closest_points.dist = 0;
+//            closest_points.closest_point1 = start_point;
+//            closest_points.closest_point2 = start_point;
+//            return closest_points;
+//        }
+//
+//        //find closest point to 12 edges
+//        lines_t edges = getEdgesFromStaticObs(obstacle, dimension, z_2d);
+//
+//        ClosestPoints closest_points_cand;
+//        closest_points.dist = SP_INFINITY;
+//        if(dimension == 2){
+//            for(auto& edge : edges){
+//                //TODO: plane check?
+//                //TODO: available only when dimension == 2
+//                closest_points_cand = closestPointsBetweenLineSegments(start_point, goal_point,
+//                                                                       edge.start_point, edge.end_point);
+//                if(closest_points_cand.dist < closest_points.dist){
+//                    closest_points.dist = closest_points_cand.dist;
+//                    closest_points.closest_point1 = closest_points_cand.closest_point1;
+//                    closest_points.closest_point2 = closest_points_cand.closest_point2;
+//                }
+//            }
+//        }
+//        else{
+//            //TODO: implement this part!
+//            throw std::invalid_argument("[Geometry] not implemented yet");
+//        }
+//
+//        return closest_points;
+//    }
 
-        ClosestPoints closest_points;
-        if(isPointInStaticObs(start_point, obstacle, dimension)){
-            closest_points.dist = 0;
-            closest_points.closest_point1 = start_point;
-            closest_points.closest_point2 = start_point;
-            return closest_points;
-        }
-
-        //find closest point to 12 edges
-        lines_t edges = getEdgesFromStaticObs(obstacle, dimension, z_2d);
-
-        ClosestPoints closest_points_cand;
-        closest_points.dist = SP_INFINITY;
-        if(dimension == 2){
-            for(auto& edge : edges){
-                //TODO: plane check?
-                //TODO: available only when dimension == 2
-                closest_points_cand = closestPointsBetweenLineSegments(start_point, goal_point,
-                                                                       edge.start_point, edge.end_point);
-                if(closest_points_cand.dist < closest_points.dist){
-                    closest_points.dist = closest_points_cand.dist;
-                    closest_points.closest_point1 = closest_points_cand.closest_point1;
-                    closest_points.closest_point2 = closest_points_cand.closest_point2;
-                }
-            }
-        }
-        else{
-            //TODO: implement this part!
-            throw std::invalid_argument("[Geometry] not implemented yet");
-        }
-
-        return closest_points;
-    }
-
-//    static octomap::point3d closestPointsBetweenPointAndStaticObs(const dynamic_msgs::Obstacle& obstacle,
-//                                                                  const octomap::point3d& point,
+//    static point_t closestPointsBetweenPointAndStaticObs(const dynamic_msgs::Obstacle& obstacle,
+//                                                                  const point_t& point,
 //                                                                  int dimension, double world_z_2d = 1.0)
 //    {
-//        octomap::point3d closest_point_in_obs, closest_point_in_line;
+//        point_t closest_point_in_obs, closest_point_in_line;
 //        double dist = distanceBetweenPointAndStaticObs(obstacle, point, closest_point_in_line, dimension, world_z_2d);
 //        return closest_point_in_obs;
 //    }
 
-//    static octomap::point3d getClosestPointOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
-//                                                            const octomap::point3d& start_point,
-//                                                            const octomap::point3d& goal_point,
+//    static point_t getClosestPointOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
+//                                                            const point_t& start_point,
+//                                                            const point_t& goal_point,
 //                                                            int dimension, double world_z_2d = 1.0)
 //    {
-//        octomap::point3d closest_point_in_obs, closest_point_in_line;
+//        point_t closest_point_in_obs, closest_point_in_line;
 //        double dist = distanceBetweenLineSegmentAndStaticObs(obstacle, start_point, goal_point,
 //                                                             closest_point_in_obs, closest_point_in_line,
 //                                                             dimension, world_z_2d);
@@ -458,9 +458,9 @@ namespace DynamicPlanning{
 //        return closest_point_in_obs;
 //    }
 
-//    static octomap::point3d getClosestVertexOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
-//                                                             const octomap::point3d& start_point,
-//                                                             const octomap::point3d& goal_point,
+//    static point_t getClosestVertexOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
+//                                                             const point_t& start_point,
+//                                                             const point_t& goal_point,
 //                                                             int dimension, double world_z_2d = 1.0)
 //    {
 //        std::array<double, 2> x_bound, y_bound, z_bound;
@@ -476,12 +476,12 @@ namespace DynamicPlanning{
 //                       obstacle.pose.position.z + obstacle.dimensions[2]};
 //        }
 //
-//        octomap::point3d vertex, closest_vertex;
+//        point_t vertex, closest_vertex;
 //        double dist, min_dist = SP_INFINITY;
 //        for(int i = 0; i < 2; i++){
 //            for(int j = 0; j < 2; j++){
 //                for(int k = 0; k < dimension - 1; k++){
-//                    vertex = octomap::point3d(x_bound[i], y_bound[j], z_bound[k]);
+//                    vertex = point_t(x_bound[i], y_bound[j], z_bound[k]);
 //                    dist = distanceBetweenPointAndLineSegment(start_point, goal_point, vertex);
 //                    if(dist < min_dist){
 //                        min_dist = dist;
@@ -494,64 +494,64 @@ namespace DynamicPlanning{
 //        return closest_vertex;
 //    }
 
-    static bool checkCollisionBetweenLineSegmentAndBox(const dynamic_msgs::Obstacle& obstacle,
-                                                       octomap::point3d start_point, octomap::point3d goal_point,
-                                                       double radius, int dimension, double z_2d = 1.0){
-        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
-            throw std::invalid_argument("[Geometry] collision check between line and box failed, Invalid obstacle");
-        }
+//    static bool checkCollisionBetweenLineSegmentAndBox(const Obstacle& obstacle,
+//                                                       point_t start_point, point_t goal_point,
+//                                                       double radius, int dimension, double z_2d = 1.0){
+//        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
+//            throw std::invalid_argument("[Geometry] collision check between line and box failed, Invalid obstacle");
+//        }
+//
+//        std::array<double,3> box_min, box_max;
+////        box_min = {obstacle.pose.position.x - obstacle.dimensions[0],
+////                   obstacle.pose.position.y - obstacle.dimensions[1],
+////                   obstacle.pose.position.z - obstacle.dimensions[2]};
+////        box_max = {obstacle.pose.position.x + obstacle.dimensions[0],
+////                   obstacle.pose.position.y + obstacle.dimensions[1],
+////                   obstacle.pose.position.z + obstacle.dimensions[2]};
+//        box_min = {obstacle.position.x - obstacle.dimensions[0] - radius,
+//                   obstacle.position.y - obstacle.dimensions[1] - radius,
+//                   obstacle.position.z - obstacle.dimensions[2] - radius};
+//        box_max = {obstacle.position.x + obstacle.dimensions[0] + radius,
+//                   obstacle.position.y + obstacle.dimensions[1] + radius,
+//                   obstacle.position.z + obstacle.dimensions[2] + radius};
+//
+//        std::array<double,3>  start, goal;
+//        start = {start_point.x(), start_point.y(), start_point.z()};
+//        goal = {goal_point.x(), goal_point.y(), goal_point.z()};
+//
+//        double alpha_min, alpha_max, alpha_cand_min, alpha_cand_max;
+//        alpha_min = 0.0;
+//        alpha_max = 1.0;
+//
+//        for(int i = 0; i < dimension; i++) {
+//            if (start[i] != goal[i]) {
+//                alpha_cand_min = (box_min[i] - start[i]) / (goal[i] - start[i]);
+//                alpha_cand_max = (box_max[i] - start[i]) / (goal[i] - start[i]);
+//                if (alpha_cand_max < alpha_cand_min) {
+//                    std::swap(alpha_cand_min, alpha_cand_max);
+//                }
+//
+//                if (alpha_min > alpha_cand_max or alpha_max < alpha_cand_min) {
+//                    return false;
+//                } else {
+//                    alpha_min = std::max(alpha_min, alpha_cand_min);
+//                    alpha_max = std::min(alpha_max, alpha_cand_max);
+//                }
+//            } else if (start[i] < box_min[i] or start[i] > box_max[i]) {
+//                return false;
+//            }
+//        }
+//
+//        // edge check
+//        ClosestPoints closest_points;
+//        closest_points = closestPointsBetweenLineSegmentAndStaticObs(start_point, goal_point,
+//                                                                     obstacle, dimension, z_2d);
+//
+//        return closest_points.dist < radius;
+//    }
 
-        std::array<double,3> box_min, box_max;
-//        box_min = {obstacle.pose.position.x - obstacle.dimensions[0],
-//                   obstacle.pose.position.y - obstacle.dimensions[1],
-//                   obstacle.pose.position.z - obstacle.dimensions[2]};
-//        box_max = {obstacle.pose.position.x + obstacle.dimensions[0],
-//                   obstacle.pose.position.y + obstacle.dimensions[1],
-//                   obstacle.pose.position.z + obstacle.dimensions[2]};
-        box_min = {obstacle.pose.position.x - obstacle.dimensions[0] - radius,
-                   obstacle.pose.position.y - obstacle.dimensions[1] - radius,
-                   obstacle.pose.position.z - obstacle.dimensions[2] - radius};
-        box_max = {obstacle.pose.position.x + obstacle.dimensions[0] + radius,
-                   obstacle.pose.position.y + obstacle.dimensions[1] + radius,
-                   obstacle.pose.position.z + obstacle.dimensions[2] + radius};
-
-        std::array<double,3>  start, goal;
-        start = {start_point.x(), start_point.y(), start_point.z()};
-        goal = {goal_point.x(), goal_point.y(), goal_point.z()};
-
-        double alpha_min, alpha_max, alpha_cand_min, alpha_cand_max;
-        alpha_min = 0.0;
-        alpha_max = 1.0;
-
-        for(int i = 0; i < dimension; i++) {
-            if (start[i] != goal[i]) {
-                alpha_cand_min = (box_min[i] - start[i]) / (goal[i] - start[i]);
-                alpha_cand_max = (box_max[i] - start[i]) / (goal[i] - start[i]);
-                if (alpha_cand_max < alpha_cand_min) {
-                    std::swap(alpha_cand_min, alpha_cand_max);
-                }
-
-                if (alpha_min > alpha_cand_max or alpha_max < alpha_cand_min) {
-                    return false;
-                } else {
-                    alpha_min = std::max(alpha_min, alpha_cand_min);
-                    alpha_max = std::min(alpha_max, alpha_cand_max);
-                }
-            } else if (start[i] < box_min[i] or start[i] > box_max[i]) {
-                return false;
-            }
-        }
-
-        // edge check
-        ClosestPoints closest_points;
-        closest_points = closestPointsBetweenLineSegmentAndStaticObs(start_point, goal_point,
-                                                                     obstacle, dimension, z_2d);
-
-        return closest_points.dist < radius;
-    }
-
-    static double computeCollisionTime(const octomap::point3d &obs_start, const octomap::point3d &obs_goal,
-                                       const octomap::point3d &agent_start, const octomap::point3d &agent_goal,
+    static double computeCollisionTime(const point_t &obs_start, const point_t &obs_goal,
+                                       const point_t &agent_start, const point_t &agent_goal,
                                        double collision_radius, double time_horizon) {
         //TODO: just solve 2nd poly?
         ClosestPoints closest_points;
@@ -559,7 +559,7 @@ namespace DynamicPlanning{
 
         double dist_in_sphere1, dist_in_sphere2, collision_time = SP_INFINITY;
         if (closest_points.dist <= collision_radius) {
-            octomap::point3d a, b, delta;
+            point_t a, b, delta;
             a = agent_start - obs_start;
             b = agent_goal - obs_goal;
             delta = closest_points.closest_point2 - closest_points.closest_point1;
@@ -567,7 +567,7 @@ namespace DynamicPlanning{
             if (a.norm() <= collision_radius) {
                 collision_time = 0;
             } else if (delta == b) {
-                octomap::point3d n_line, c;
+                point_t n_line, c;
                 double dist_to_b, dist_to_c;
                 dist_to_b = b.norm();
                 n_line = (b - a).normalized();
@@ -587,72 +587,72 @@ namespace DynamicPlanning{
         return collision_time;
     }
 
-    static double computeCollisionTime(const dynamic_msgs::Obstacle &obstacle,
-                                       const octomap::point3d &start_point, const octomap::point3d &goal_point,
-                                       double collision_radius, double time_horizon, int dimension, double z_2d) {
-        if (obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3) {
-            throw std::invalid_argument("[Geometry] collision check between line and box failed, Invalid obstacle");
-        }
+//    static double computeCollisionTime(const dynamic_msgs::Obstacle &obstacle,
+//                                       const point_t &start_point, const point_t &goal_point,
+//                                       double collision_radius, double time_horizon, int dimension, double z_2d) {
+//        if (obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3) {
+//            throw std::invalid_argument("[Geometry] collision check between line and box failed, Invalid obstacle");
+//        }
+//
+//        std::array<double, 3> big_box_min, big_box_max;
+//        big_box_min = {obstacle.pose.position.x - obstacle.dimensions[0] - collision_radius,
+//                       obstacle.pose.position.y - obstacle.dimensions[1] - collision_radius,
+//                       obstacle.pose.position.z - obstacle.dimensions[2] - collision_radius};
+//        big_box_max = {obstacle.pose.position.x + obstacle.dimensions[0] + collision_radius,
+//                       obstacle.pose.position.y + obstacle.dimensions[1] + collision_radius,
+//                       obstacle.pose.position.z + obstacle.dimensions[2] + collision_radius};
+//
+//        std::array<double, 3> start, goal;
+//        start = {start_point.x(), start_point.y(), start_point.z()};
+//        goal = {goal_point.x(), goal_point.y(), goal_point.z()};
+//
+//        double alpha_min, alpha_max, alpha_cand_min, alpha_cand_max;
+//        alpha_min = 0.0;
+//        alpha_max = 1.0;
+//
+//        for (int i = 0; i < dimension; i++) {
+//            if (start[i] != goal[i]) {
+//                alpha_cand_min = (big_box_min[i] - start[i]) / (goal[i] - start[i]);
+//                alpha_cand_max = (big_box_max[i] - start[i]) / (goal[i] - start[i]);
+//                if (alpha_cand_max < alpha_cand_min) {
+//                    std::swap(alpha_cand_min, alpha_cand_max);
+//                }
+//
+//                if (alpha_min > alpha_cand_max or alpha_max < alpha_cand_min) {
+//                    return SP_INFINITY;
+//                } else {
+//                    alpha_min = std::max(alpha_min, alpha_cand_min);
+//                    alpha_max = std::min(alpha_max, alpha_cand_max);
+//                }
+//            } else if (start[i] < big_box_min[i] or start[i] > big_box_max[i]) {
+//                return SP_INFINITY;
+//            }
+//        }
+//
+//        point_t closest_point_cand = start_point + (goal_point - start_point) * alpha_min;
+//        ClosestPoints closest_points_to_static_obs = closestPointsBetweenPointAndStaticObs(closest_point_cand,
+//                                                                                           obstacle,
+//                                                                                           dimension, z_2d);
+//
+//        point_t closest_point_obs = closest_points_to_static_obs.closest_point2;
+//        double collision_time = computeCollisionTime(closest_point_obs, closest_point_obs,
+//                                                     start_point, goal_point,
+//                                                     collision_radius, time_horizon);
+//        return collision_time;
+//    }
 
-        std::array<double, 3> big_box_min, big_box_max;
-        big_box_min = {obstacle.pose.position.x - obstacle.dimensions[0] - collision_radius,
-                       obstacle.pose.position.y - obstacle.dimensions[1] - collision_radius,
-                       obstacle.pose.position.z - obstacle.dimensions[2] - collision_radius};
-        big_box_max = {obstacle.pose.position.x + obstacle.dimensions[0] + collision_radius,
-                       obstacle.pose.position.y + obstacle.dimensions[1] + collision_radius,
-                       obstacle.pose.position.z + obstacle.dimensions[2] + collision_radius};
-
-        std::array<double, 3> start, goal;
-        start = {start_point.x(), start_point.y(), start_point.z()};
-        goal = {goal_point.x(), goal_point.y(), goal_point.z()};
-
-        double alpha_min, alpha_max, alpha_cand_min, alpha_cand_max;
-        alpha_min = 0.0;
-        alpha_max = 1.0;
-
-        for (int i = 0; i < dimension; i++) {
-            if (start[i] != goal[i]) {
-                alpha_cand_min = (big_box_min[i] - start[i]) / (goal[i] - start[i]);
-                alpha_cand_max = (big_box_max[i] - start[i]) / (goal[i] - start[i]);
-                if (alpha_cand_max < alpha_cand_min) {
-                    std::swap(alpha_cand_min, alpha_cand_max);
-                }
-
-                if (alpha_min > alpha_cand_max or alpha_max < alpha_cand_min) {
-                    return SP_INFINITY;
-                } else {
-                    alpha_min = std::max(alpha_min, alpha_cand_min);
-                    alpha_max = std::min(alpha_max, alpha_cand_max);
-                }
-            } else if (start[i] < big_box_min[i] or start[i] > big_box_max[i]) {
-                return SP_INFINITY;
-            }
-        }
-
-        octomap::point3d closest_point_cand = start_point + (goal_point - start_point) * alpha_min;
-        ClosestPoints closest_points_to_static_obs = closestPointsBetweenPointAndStaticObs(closest_point_cand,
-                                                                                           obstacle,
-                                                                                           dimension, z_2d);
-
-        octomap::point3d closest_point_obs = closest_points_to_static_obs.closest_point2;
-        double collision_time = computeCollisionTime(closest_point_obs, closest_point_obs,
-                                                     start_point, goal_point,
-                                                     collision_radius, time_horizon);
-        return collision_time;
-    }
-
-    static octomap::point3d lineDirection(const Line& line){
+    static point_t lineDirection(const Line& line){
         if(line.start_point == line.end_point){
             throw std::invalid_argument("[Geometry] line start and end is the same");
         }
         return (line.end_point - line.start_point).normalized();
     }
 
-    static double safeDistInDirection(const octomap::point3d& position, const octomap::point3d& direction,
+    static double safeDistInDirection(const point_t& position, const point_t& direction,
                                       const std::vector<dynamic_msgs::Obstacle>& obstacles, double radius,
                                       int dimension, double z_2d) {
         double radius_sum, dist_to_closest_point, safe_dist = SP_INFINITY;
-        octomap::point3d obs_position, ray_closest_point;
+        point_t obs_position, ray_closest_point;
         ClosestPoints closest_points;
 //        for (int oi = 0; oi < obstacles.size(); oi++) {
 //            if (obstacles[oi].type == ObstacleType::STATICOBSTACLE) {
@@ -680,14 +680,15 @@ namespace DynamicPlanning{
 
         for (int oi = 0; oi < obstacles.size(); oi++) {
             double safe_dist_cand = SP_INFINITY;
-            if (obstacles[oi].type == ObstacleType::STATICOBSTACLE) {
-                double fake_dist_to_goal = 10.0;
-                double fake_horizon = 1.0;
-                double collision_time = computeCollisionTime(obstacles[oi], position,
-                                                             position + direction * fake_dist_to_goal, radius,
-                                                             fake_horizon, dimension, z_2d);
-                safe_dist_cand = fake_dist_to_goal * collision_time / fake_horizon;
-            } else {
+//            if (obstacles[oi].type == ObstacleType::STATICOBSTACLE) {
+//                double fake_dist_to_goal = 10.0;
+//                double fake_horizon = 1.0;
+//                double collision_time = computeCollisionTime(obstacles[oi], position,
+//                                                             position + direction * fake_dist_to_goal, radius,
+//                                                             fake_horizon, dimension, z_2d);
+//                safe_dist_cand = fake_dist_to_goal * collision_time / fake_horizon;
+//            } else
+            {
                 obs_position = pointMsgToPoint3d(obstacles[oi].pose.position);
                 radius_sum = obstacles[oi].radius + radius;
                 closest_points = closestPointsBetweenPointAndRay(obs_position, position, direction);

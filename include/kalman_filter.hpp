@@ -35,9 +35,10 @@ namespace DynamicPlanning {
             isFirstInput = true;
         }
 
-        dynamic_msgs::Obstacle filter(const dynamic_msgs::Obstacle& obstacle, ros::Time current_update_time){
+        Obstacle filter(const Obstacle& obstacle){
             // Observe
-            Y << obstacle.pose.position.x, obstacle.pose.position.y, obstacle.pose.position.z;
+            Y << obstacle.position.x(), obstacle.position.y(), obstacle.position.z();
+            ros::Time current_update_time = obstacle.update_time;
 
             if(isFirstInput){
                 X_hat << Y, 0, 0, 0;
@@ -64,13 +65,9 @@ namespace DynamicPlanning {
                 P = P_update - K * H * P_update;
             }
 
-            dynamic_msgs::Obstacle result = obstacle;
-            result.pose.position.x = X_hat(0, 0);
-            result.pose.position.y = X_hat(1, 0);
-            result.pose.position.z = X_hat(2, 0);
-            result.velocity.linear.x = X_hat(3, 0);
-            result.velocity.linear.y = X_hat(4, 0);
-            result.velocity.linear.z = X_hat(5, 0);
+            Obstacle result = obstacle;
+            result.position = point_t(X_hat(0, 0), X_hat(1, 0), X_hat(2, 0));
+            result.velocity = point_t(X_hat(3, 0), X_hat(4, 0), X_hat(5, 0));
 
 //            double v = sqrt(pow(result.velocity.linear.x, 2) + pow(result.velocity.linear.y, 2) + pow(result.velocity.linear.z, 2));
 //            std::cout << "dt: " << dt << ", v: " << v << std::endl;

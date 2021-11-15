@@ -434,53 +434,53 @@ namespace DynamicPlanning {
         }
     };
 
-    class StaticObstacle : public ObstacleBase {
-    public:
-        StaticObstacle() : ObstacleBase(0, 0, 1) {
-            type = "static";
-        }
-
-        StaticObstacle(geometry_msgs::Point _pose, geometry_msgs::Point _dimensions)
-                : pose(_pose), dimensions(_dimensions), ObstacleBase(0, 0, 1)
-        {
-            type = "static";
-        }
-
-        dynamic_msgs::Obstacle getObstacle_impl(double t) override {
-            return getStaticObstacle();
-        }
-
-    private:
-        geometry_msgs::Point pose;
-        geometry_msgs::Point dimensions;
-
-        dynamic_msgs::Obstacle getStaticObstacle() {
-            dynamic_msgs::Obstacle staticObstacle;
-            staticObstacle.pose.position = pose;
-
-            staticObstacle.dimensions.resize(3);
-            staticObstacle.dimensions[0] = dimensions.x;
-            staticObstacle.dimensions[1] = dimensions.y;
-            staticObstacle.dimensions[2] = dimensions.z;
-
-            staticObstacle.velocity.linear.x = 0;
-            staticObstacle.velocity.linear.y = 0;
-            staticObstacle.velocity.linear.z = 0;
-
-            staticObstacle.goal_point = pose;
-            staticObstacle.max_acc = 0;
-            staticObstacle.downwash = 1;
-            staticObstacle.id = -1;
-            staticObstacle.radius = -1;
-
-            return staticObstacle;
-        }
-    };
+//    class StaticObstacle : public ObstacleBase {
+//    public:
+//        StaticObstacle() : ObstacleBase(0, 0, 1) {
+//            type = "static";
+//        }
+//
+//        StaticObstacle(geometry_msgs::Point _pose, geometry_msgs::Point _dimensions)
+//                : pose(_pose), dimensions(_dimensions), ObstacleBase(0, 0, 1)
+//        {
+//            type = "static";
+//        }
+//
+//        dynamic_msgs::Obstacle getObstacle_impl(double t) override {
+//            return getStaticObstacle();
+//        }
+//
+//    private:
+//        geometry_msgs::Point pose;
+//        geometry_msgs::Point dimensions;
+//
+//        dynamic_msgs::Obstacle getStaticObstacle() {
+//            dynamic_msgs::Obstacle staticObstacle;
+//            staticObstacle.pose.position = pose;
+//
+//            staticObstacle.dimensions.resize(3);
+//            staticObstacle.dimensions[0] = dimensions.x;
+//            staticObstacle.dimensions[1] = dimensions.y;
+//            staticObstacle.dimensions[2] = dimensions.z;
+//
+//            staticObstacle.velocity.linear.x = 0;
+//            staticObstacle.velocity.linear.y = 0;
+//            staticObstacle.velocity.linear.z = 0;
+//
+//            staticObstacle.goal_point = pose;
+//            staticObstacle.max_acc = 0;
+//            staticObstacle.downwash = 1;
+//            staticObstacle.id = -1;
+//            staticObstacle.radius = -1;
+//
+//            return staticObstacle;
+//        }
+//    };
 
     class BernsteinObstacle : public ObstacleBase {
     public:
-        BernsteinObstacle(std::vector<std::vector<octomap::point3d>> _control_points, std::vector<double> _time_segments,
-                double _radius, double _max_acc, double _downwash)
+        BernsteinObstacle(std::vector<points_t> _control_points, std::vector<double> _time_segments,
+                          double _radius, double _max_acc, double _downwash)
                 : control_points(std::move(_control_points)), time_segments(_time_segments), ObstacleBase(_radius, _max_acc, _downwash) {
             type = "bernstein";
 
@@ -499,7 +499,7 @@ namespace DynamicPlanning {
         }
 
     private:
-        std::vector<std::vector<octomap::point3d>> control_points;
+        std::vector<points_t> control_points;
         std::vector<double> time_segments;
         int M, n;
 

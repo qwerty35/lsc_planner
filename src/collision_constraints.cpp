@@ -1,8 +1,8 @@
 #include <collision_constraints.hpp>
 
 namespace DynamicPlanning{
-    LSC::LSC(const octomap::point3d& _obs_control_point,
-             const octomap::point3d& _normal_vector,
+    LSC::LSC(const point_t& _obs_control_point,
+             const point_t& _normal_vector,
              double _d)
             : obs_control_point(_obs_control_point), normal_vector(_normal_vector), d(_d) {}
 
@@ -29,14 +29,14 @@ namespace DynamicPlanning{
     }
 
 
-    Box::Box(const octomap::point3d& _box_min, const octomap::point3d& _box_max){
+    SFC::SFC(const point_t& _box_min, const point_t& _box_max){
         box_min = _box_min;
         box_max = _box_max;
     }
 
-    LSCs Box::convertToLSCs(int dim) const{
-        octomap::point3d normal_vector_min, normal_vector_max;
-        octomap::point3d zero_point = octomap::point3d(0, 0, 0);
+    LSCs SFC::convertToLSCs(int dim) const{
+        point_t normal_vector_min, normal_vector_max;
+        point_t zero_point = point_t(0, 0, 0);
         double d_min, d_max;
 
         std::vector<LSC> lscs;
@@ -58,7 +58,7 @@ namespace DynamicPlanning{
         return lscs;
     }
 
-    visualization_msgs::Marker Box::convertToMarker(double agent_radius) const{
+    visualization_msgs::Marker SFC::convertToMarker(double agent_radius) const{
         visualization_msgs::Marker msg_marker;
         msg_marker.header.frame_id = "world"; //TODO: frame id
         msg_marker.type = visualization_msgs::Marker::LINE_LIST;
@@ -67,8 +67,8 @@ namespace DynamicPlanning{
         msg_marker.pose.orientation = defaultQuaternion();
         msg_marker.scale.x = 0.03;
 
-        octomap::point3d inflation_vector(agent_radius, agent_radius, agent_radius);
-        Box inflated_box = Box(box_min - inflation_vector, box_max + inflation_vector);
+        point_t inflation_vector(agent_radius, agent_radius, agent_radius);
+        SFC inflated_box = SFC(box_min - inflation_vector, box_max + inflation_vector);
         lines_t edges = inflated_box.getEdges();
         for(const auto& edge : edges){
             msg_marker.points.emplace_back(point3DToPointMsg(edge.start_point));
@@ -78,7 +78,7 @@ namespace DynamicPlanning{
         return msg_marker;
     }
 
-    bool Box::isPointInBox(const octomap::point3d& point) const{
+    bool SFC::isPointInSFC(const point_t& point) const{
         return point.x() > box_min.x() - SP_EPSILON_FLOAT &&
                point.y() > box_min.y() - SP_EPSILON_FLOAT &&
                point.z() > box_min.z() - SP_EPSILON_FLOAT &&
@@ -87,20 +87,21 @@ namespace DynamicPlanning{
                point.z() < box_max.z() + SP_EPSILON_FLOAT;
     }
 
-    bool Box::isPointsInTwoBox(const std::vector<octomap::point3d>& points, const Box& other_sfc) const{
-        if(not intersectWith(other_sfc)){
-            return false;
-        }
-
-        for(const auto& point : points){
-            if(!isPointInBox(point) && !other_sfc.isPointInBox(point)){
-                return false;
-            }
-        }
-        return true;
+    bool SFC::isLineInSFC(const Line& line) const{
+        return isPointInSFC(line.start_point) && isPointInSFC(line.end_point);
     }
 
-    bool Box::isSuperSetOfConvexHull(const std::vector<octomap::point3d>& convex_hull) const{
+    bool SFC::isSFCInBoundary(const point_t& world_min, const point_t& world_max,
+                              double margin) const {
+        return box_min.x() > world_min.x() + margin - SP_EPSILON &&
+               box_min.y() > world_min.y() + margin - SP_EPSILON &&
+               box_min.z() > world_min.z() + margin - SP_EPSILON &&
+               box_max.x() < world_max.x() - margin + SP_EPSILON &&
+               box_max.y() < world_max.y() - margin + SP_EPSILON &&
+               box_max.z() < world_max.z() - margin + SP_EPSILON;
+    }
+
+    bool SFC::isSuperSetOfConvexHull(const points_t& convex_hull) const{
         float min_value, max_value;
         for(int i = 0; i < 3; i++){
             std::vector<float> points_i;
@@ -117,25 +118,8 @@ namespace DynamicPlanning{
         return true;
     }
 
-    bool Box::isLineOnBoundary(const Line& line) const {
-        std::vector<octomap::point3d> points = {line.start_point, line.end_point};
-        if (not isSuperSetOfConvexHull(points)) {
-            return false;
-        }
-
-        for (int i = 0; i < 3; i++) {
-            if (abs(line.start_point(i) - line.end_point(i)) < SP_EPSILON_FLOAT and
-                (abs(line.start_point(i) - box_min(i)) < SP_EPSILON_FLOAT or
-                 abs(line.start_point(i) - box_max(i)) < SP_EPSILON_FLOAT)) {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    bool Box::intersectWith(const Box& other_sfc) const{
-        Box inter_sfc = intersection(other_sfc);
+    bool SFC::intersectWith(const SFC& other_sfc) const{
+        SFC inter_sfc = intersection(other_sfc);
         for(int i = 0; i <3; i++){
             if(inter_sfc.box_min(i) > inter_sfc.box_max(i) - SP_EPSILON_FLOAT){
                 return false;
@@ -144,8 +128,8 @@ namespace DynamicPlanning{
         return true;
     }
 
-    Box Box::unify(const Box& other_sfc) const{
-        Box unified_box;
+    SFC SFC::unify(const SFC& other_sfc) const{
+        SFC unified_box;
         for(int i = 0; i < 3; i++){
             unified_box.box_min(i) = std::min(box_min(i), other_sfc.box_min(i));
             unified_box.box_max(i) = std::max(box_max(i), other_sfc.box_max(i));
@@ -153,8 +137,8 @@ namespace DynamicPlanning{
         return unified_box;
     }
 
-    Box Box::intersection(const Box& other_sfc) const{
-        Box inter_box;
+    SFC SFC::intersection(const SFC& other_sfc) const{
+        SFC inter_box;
         for(int i = 0; i < 3; i++){
             inter_box.box_min(i) = std::max(box_min(i), other_sfc.box_min(i));
             inter_box.box_max(i) = std::min(box_max(i), other_sfc.box_max(i));
@@ -162,13 +146,31 @@ namespace DynamicPlanning{
         return inter_box;
     }
 
-    std::vector<octomap::point3d> Box::getVertices() const{
-        std::vector<octomap::point3d> vertices;
+    double SFC::distanceToPoint(const point_t& point) const{
+        if(isPointInSFC(point)){
+            return 0;
+        }
+
+        point_t closest_point = point;
+        for(int i = 0; i < 3; i++){
+            if(point(i) < box_min(i)){
+                closest_point(i) = box_min(i);
+            }
+            else if(point(i) > box_max(i)){
+                closest_point(i) = box_max(i);
+            }
+        }
+
+        return (point - closest_point).norm();
+    }
+
+    points_t SFC::getVertices() const{
+        points_t vertices;
         vertices.emplace_back(box_min);
         vertices.emplace_back(box_max);
         for(int i = 0; i < 3; i++){
-            octomap::point3d point1 = box_min;
-            octomap::point3d point2 = box_max;
+            point_t point1 = box_min;
+            point_t point2 = box_max;
             point1(i) = box_max(i);
             point2(i) = box_min(i);
             vertices.emplace_back(point1);
@@ -178,11 +180,11 @@ namespace DynamicPlanning{
         return vertices;
     }
 
-    lines_t Box::getEdges() const{
+    lines_t SFC::getEdges() const{
         lines_t edges;
 
         // find edges
-        octomap::point3d vertex1, vertex2, vertex3;
+        point_t vertex1, vertex2, vertex3;
 
         vertex1 = box_min;
         for(int i = 0; i < 3; i++){
@@ -208,133 +210,17 @@ namespace DynamicPlanning{
         return edges;
     }
 
-    octomap::point3d Box::getBoxMin() const{
-        return box_min;
-    }
+    void CollisionConstraints::initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr_, int N_obs_,
+                                          std::set<int> obs_slack_indices_,
+                                          const Param& param_, const Mission& mission_){
+        distmap_ptr = distmap_ptr_;
+        param = param_;
+        mission = mission_;
 
-    octomap::point3d Box::getBoxMax() const{
-        return box_max;
-    }
-
-    LSCs SFC::convertToLSCs(int dim) const{
-        LSCs ret = box.convertToLSCs(dim);
-        ret.insert(ret.end(), lscs.begin(), lscs.end());
-        return ret;
-    }
-
-    bool SFC::update(const Box& box_){
-        box = box_;
-        inter_box = box_;
-        lscs.clear();
-        return true;
-    }
-
-    bool SFC::update(const std::vector<octomap::point3d>& convex_hull, const Box& box1, const Box& box2) {
-        double dist_to_convex_hull = 0;
-        return update(convex_hull, box1, box2, dist_to_convex_hull);
-    }
-
-
-    bool SFC::update(const std::vector<octomap::point3d>& convex_hull,
-                     const Box& box1, const Box& box2, double& dist_to_convex_hull) {
-        box = box1.unify(box2);
-        inter_box = box1.intersection(box2);
-        lscs.clear();
-
-        if(not box1.intersectWith(box2)){
-            return false;
-        }
-
-        if(not box1.isPointsInTwoBox(convex_hull, box2)){
-            return false;
-        }
-
-        lines_t edges = inter_box.getEdges();
-        for(const auto& edge : edges){
-            if(!box1.isLineOnBoundary(edge) or
-               !box2.isLineOnBoundary(edge) or
-               box.isLineOnBoundary(edge))
-            {
-                continue;
-            }
-
-            std::vector<octomap::point3d> proj_convex_hull;
-            octomap::point3d edge_direction = edge.direction();
-            for(const auto& point : convex_hull){
-                octomap::point3d rel_point = point - edge.start_point;
-                octomap::point3d proj_point = rel_point - edge_direction * (edge_direction.dot(rel_point));
-                proj_convex_hull.emplace_back(proj_point);
-            }
-            std::vector<octomap::point3d> vertices = inter_box.getVertices();
-            for(const auto& vertex : vertices){
-                if((edge.start_point - vertex).norm_sq() < SP_EPSILON_FLOAT or
-                   (edge.end_point - vertex).norm_sq() < SP_EPSILON_FLOAT){
-                    continue;
-                }
-                octomap::point3d rel_point = vertex - edge.start_point;
-                octomap::point3d proj_point = rel_point - edge_direction * (edge_direction.dot(rel_point));
-                proj_convex_hull.emplace_back(proj_point);
-            }
-
-            ClosestPoints closest_points = closestPointsBetweenPointAndConvexHull(octomap::point3d(0,0,0),
-                                                                                  proj_convex_hull);
-            dist_to_convex_hull = -closest_points.dist;
-
-            if(closest_points.dist > SP_EPSILON_FLOAT){
-                octomap::point3d normal_vector = (closest_points.closest_point2 - closest_points.closest_point1).normalized();
-
-                LSC lsc(edge.start_point, normal_vector, 0);
-                lscs.emplace_back(lsc);
-            }
-            else{
-                octomap::point3d normal_vector, normal_vector_cand;
-                for(const auto& proj_point : proj_convex_hull){
-                    if(proj_point.norm_sq() < SP_EPSILON_FLOAT){
-                        continue;
-                    }
-
-                    normal_vector_cand = proj_point.cross(edge_direction).normalized();
-                    bool isProperNormalVector = true;
-                    for(const auto& point_j : proj_convex_hull){
-                        if(point_j.dot(normal_vector_cand) < -SP_EPSILON_FLOAT){
-                            isProperNormalVector = false;
-                            break;
-                        }
-                    }
-                    if(not isProperNormalVector){
-                        isProperNormalVector = true;
-                        normal_vector_cand = -normal_vector_cand;
-                        for(const auto& point_j : proj_convex_hull){
-                            if(point_j.dot(normal_vector_cand) < -SP_EPSILON_FLOAT){
-                                isProperNormalVector = false;
-                                break;
-                            }
-                        }
-                    }
-
-                    if(isProperNormalVector){
-                        normal_vector = (normal_vector + normal_vector_cand).normalized();
-                        break;
-                    }
-                }
-                if(normal_vector.norm() == 0){
-                    // convex hull is out of two boxes
-                    return false;
-                }
-
-                LSC sfce(edge.start_point, normal_vector, 0);
-                lscs.emplace_back(sfce);
-            }
-        }
-
-        return true;
-    }
-
-    void CollisionConstraints::initialize(int N_obs_, int M_, int n_, double dt_, std::set<int> obs_slack_indices_){
         N_obs = N_obs_;
-        M = M_;
-        n = n_;
-        dt = dt_;
+        M = param.M;
+        n = param.n;
+        dt = param.dt;
         obs_slack_indices = std::move(obs_slack_indices_);
 
         //RSFC
@@ -348,8 +234,68 @@ namespace DynamicPlanning{
 
         //SFC
         sfcs.resize(M);
+        sfc_library.clear();
     }
 
+    void CollisionConstraints::initializeSFC(const point_t& agent_position, double radius) {
+        SFC sfc = expandSFCFromPoint(agent_position, radius);
+        for(int m = 0; m < M; m++){
+            sfcs[m] = sfc;
+        }
+    }
+
+    void CollisionConstraints::generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
+                                                   const points_t& grid_path, double agent_radius){
+        // Update sfc library using discrete path
+        for(int i = 0; i < grid_path.size() - 1; i++){
+            Line line_curr = Line(grid_path[i], grid_path[i + 1]);
+            bool update = true;
+            for(const auto& sfc : sfc_library){
+                if(sfc.isLineInSFC(line_curr)){
+                    update = false;
+                    break;
+                }
+            }
+
+            if(update) {
+                sfc_library.emplace_back(expandSFCFromLine(line_curr, agent_radius));
+            }
+        }
+
+        // Update sfc for segments m < M-1 from previous sfc
+        for(int m = 0; m < M - 1; m++){
+            sfcs[m] = sfcs[m + 1];
+        }
+
+        // Find last point is in sfc_library
+        SFC sfc_update;
+        double min_dist_to_goal = SP_INFINITY;
+        for(const auto& sfc : sfc_library){
+            Line line(last_point, current_goal_position);
+            if(sfc.isLineInSFC(line)){
+                sfc_update = sfc;
+                break;
+            }
+            else if(sfc.isPointInSFC(last_point)){
+                double dist = sfc.distanceToPoint(current_goal_position);
+                if(dist < min_dist_to_goal){
+                    sfc_update = sfc;
+                    min_dist_to_goal = dist;
+                }
+            }
+        }
+
+        if(min_dist_to_goal == SP_INFINITY){
+            try{
+                sfc_update = expandSFCFromPoint(last_point, agent_radius);
+            }
+            catch(...){ //TODO: define error
+                sfc_update = sfcs[M - 1]; // Reuse previous one
+            }
+        }
+
+        sfcs[M - 1] = sfc_update;
+    }
 
     LSC CollisionConstraints::getLSC(int oi, int m, int i) const{
         return lscs[oi][m][i];
@@ -368,8 +314,8 @@ namespace DynamicPlanning{
     }
 
     void CollisionConstraints::setLSC(int oi, int m,
-                                      const std::vector<octomap::point3d>& obs_control_points,
-                                      const octomap::point3d& normal_vector,
+                                      const points_t& obs_control_points,
+                                      const vector_t& normal_vector,
                                       const std::vector<double>& ds) {
         for(int i = 0; i < n + 1; i++){
             lscs[oi][m][i] = LSC(obs_control_points[i], normal_vector, ds[i]);
@@ -377,8 +323,8 @@ namespace DynamicPlanning{
     }
 
     void CollisionConstraints::setLSC(int oi, int m,
-                                      const std::vector<octomap::point3d>& obs_control_points,
-                                      const octomap::point3d& normal_vector,
+                                      const points_t& obs_control_points,
+                                      const vector_t& normal_vector,
                                       double d) {
         for(int i = 0; i < n + 1; i++){
             lscs[oi][m][i] = LSC(obs_control_points[i], normal_vector, d);
@@ -389,15 +335,8 @@ namespace DynamicPlanning{
         sfcs[m] = sfc;
     }
 
-    void CollisionConstraints::setSFC(int m, const Box& box){
-        sfcs[m].box = box;
-        sfcs[m].lscs.clear();
-        sfcs[m].box_library_idx1 = -1;
-        sfcs[m].box_library_idx2 = -1;
-    }
-
     visualization_msgs::MarkerArray CollisionConstraints::convertToMarkerArrayMsg (
-            const std::vector<dynamic_msgs::Obstacle>& obstacles,
+            const std::vector<Obstacle>& obstacles,
             const std::vector<std_msgs::ColorRGBA>& colors,
             int agent_id, double agent_radius) const
     {
@@ -408,7 +347,7 @@ namespace DynamicPlanning{
     }
 
     visualization_msgs::MarkerArray CollisionConstraints::convertLSCsToMarkerArrayMsg (
-            const std::vector<dynamic_msgs::Obstacle>& obstacles,
+            const std::vector<Obstacle>& obstacles,
             const std::vector<std_msgs::ColorRGBA>& colors,
             double agent_radius) const
     {
@@ -458,7 +397,7 @@ namespace DynamicPlanning{
         msg_marker_array.markers.clear();
         for (int m = 0; m < M; m++) {
 //            visualization_msgs::Marker msg_marker = sfcs[m].box.convertToMarker(agent_radius);
-            visualization_msgs::Marker msg_marker = sfcs[m].box.convertToMarker(0);
+            visualization_msgs::Marker msg_marker = sfcs[m].convertToMarker(0);
             msg_marker.id = m;
             msg_marker.ns = "SFC" + std::to_string(m);
             msg_marker.color = color;
@@ -466,35 +405,11 @@ namespace DynamicPlanning{
             msg_marker_array.markers.emplace_back(msg_marker);
         }
 
-        for(int m = 0; m < M; m++){
-            int marker_id = 2*M;
-            for(const auto& lsc : sfcs[m].lscs){
-//                visualization_msgs::Marker msg_marker = sfce.convertToMarker(agent_radius);
-                visualization_msgs::Marker msg_marker = lsc.convertToMarker(0);
-                msg_marker.id = marker_id;
-                msg_marker.ns = "LSC" + std::to_string(m);
-                msg_marker.color = color;
-                msg_marker.color.a = 0.2;
-                msg_marker_array.markers.emplace_back(msg_marker);
-                marker_id++;
-            }
-
-            // delete sfcs used in the previous step
-            int max_n_lsc = 12;
-            for(int i = marker_id; i < M + max_n_lsc; i++){
-                visualization_msgs::Marker msg_marker;
-                msg_marker.action = visualization_msgs::Marker::DELETE;
-                msg_marker.id = i;
-                msg_marker.ns = "LSC" + std::to_string(m);
-                msg_marker_array.markers.emplace_back(msg_marker);
-            }
-        }
-
         return msg_marker_array;
     }
 
     dynamic_msgs::CollisionConstraint CollisionConstraints::convertToRawMsg(
-            const std::vector<dynamic_msgs::Obstacle>& obstacles, int planner_seq) const {
+            const std::vector<Obstacle>& obstacles, int planner_seq) const {
         dynamic_msgs::CollisionConstraint msg_collision_constraint;
         msg_collision_constraint.planner_seq = planner_seq;
 
@@ -528,11 +443,193 @@ namespace DynamicPlanning{
             msg_collision_constraint.sfcs.resize(M);
             for(int m = 0; m < M; m++){
                 msg_collision_constraint.sfcs[m].param = constraint_param;
-                msg_collision_constraint.sfcs[m].box_min = point3DToPointMsg(sfcs[m].box.getBoxMin());
-                msg_collision_constraint.sfcs[m].box_max = point3DToPointMsg(sfcs[m].box.getBoxMax());
+                msg_collision_constraint.sfcs[m].box_min = point3DToPointMsg(sfcs[m].box_min);
+                msg_collision_constraint.sfcs[m].box_max = point3DToPointMsg(sfcs[m].box_max);
             }
         }
 
         return msg_collision_constraint;
+    }
+
+    SFC CollisionConstraints::expandSFCFromPoint(const point_t& point, double agent_radius) {
+        // Initialize initial_box
+        SFC initial_sfc;
+
+        for(int i = 0; i < 3; i++){
+            double round_point_i = round(point(i) / param.world_resolution) * param.world_resolution;
+            if(abs(point(i) - round_point_i) < SP_EPSILON_FLOAT){
+                initial_sfc.box_min(i) = round_point_i;
+                initial_sfc.box_max(i) = round_point_i;
+            }
+            else{
+                initial_sfc.box_min(i) = floor(point(i) / param.world_resolution) * param.world_resolution;
+                initial_sfc.box_max(i) = ceil(point(i) / param.world_resolution) * param.world_resolution;
+            }
+        }
+
+        SFC sfc = expandSFC(initial_sfc, agent_radius);
+        return sfc;
+    }
+
+    SFC CollisionConstraints::expandSFCFromLine(const Line& line, double agent_radius) {
+        // Initialize initial_box
+        SFC initial_sfc;
+
+        for(int i = 0; i < 3; i++) {
+            initial_sfc.box_min(i) =
+                    round(std::min(line.start_point(i), line.end_point(i)) / param.world_resolution) *
+                    param.world_resolution;
+            initial_sfc.box_max(i) =
+                    round(std::max(line.start_point(i), line.end_point(i)) / param.world_resolution) *
+                    param.world_resolution;
+        }
+
+        SFC sfc = expandSFC(initial_sfc, agent_radius);
+        return sfc;
+    }
+
+    std::vector<double> CollisionConstraints::initializeBoxFromPoints(const points_t& points) const{
+        std::vector<double> box;
+        box.resize(6);
+        double epsilon = 1e-3;
+
+        // Find minimum box that covers all points
+        for(int i = 0; i < 3; i++){
+            std::vector<float> points_i;
+            for(auto point : points){
+                points_i.emplace_back(point(i));
+            }
+            box[i] = *std::min_element(points_i.begin(), points_i.end());
+            box[i+3] = *std::max_element(points_i.begin(), points_i.end());
+        }
+
+        for(int i = 0; i < 3; i++){
+            box[i] = floor((box[i] + epsilon) / param.world_resolution) * param.world_resolution;
+            box[i+3] = ceil((box[i+3] - epsilon) / param.world_resolution) * param.world_resolution;
+        }
+
+        return box;
+    }
+
+    bool CollisionConstraints::isObstacleInSFC(const SFC& sfc, double margin) {
+        std::array<int, 3> sfc_size = {0, 0, 0};
+        for(int i = 0; i < 3; i++){
+            sfc_size[i] = (int)round((sfc.box_max(i) - sfc.box_min(i)) / param.world_resolution) + 1;
+        }
+
+        point_t delta;
+        std::array<size_t, 3> iter = {0, 0, 0};
+//        for (iter[0] = 0; iter[0] < std::max(sfc_size[0], 2); iter[0]++) {
+//            for (iter[1] = 0; iter[1] < std::max(sfc_size[1], 2); iter[1]++) {
+//                for (iter[2] = 0; iter[2] < std::max(sfc_size[2], 2); iter[2]++) {
+        for (iter[0] = 0; iter[0] < sfc_size[0]; iter[0]++) {
+            for (iter[1] = 0; iter[1] < sfc_size[1]; iter[1]++) {
+                for (iter[2] = 0; iter[2] < sfc_size[2]; iter[2]++) {
+                    float dist;
+                    point_t search_point, closest_point;
+                    for(int i = 0; i < 3; i++){
+                        search_point(i) = sfc.box_min(i) + iter[i] * param.world_resolution;
+                    }
+                    distmap_ptr->getDistanceAndClosestObstacle(search_point, dist, closest_point);
+
+                    // Due to numerical error of getDistance function, explicitly compute distance to obstacle
+                    double dist_to_obs = search_point.distance(closest_point);
+
+                    if (dist_to_obs < margin) {
+                        return true;
+                    }
+
+//                    point_t search_point;
+//                    for(int i = 0; i < 3; i++){
+//                        if(sfc_size[i] == 1 and iter[i] > 0){
+//                            search_point(i) = sfc.box_min(i);
+//                        }
+//                        else{
+//                            search_point(i) = sfc.box_min(i) + iter[i] * param.world_resolution;
+//                        }
+//                    }
+//
+//                    // Find delta to compensate numerical error
+//                    for(int i = 0; i < 3; i++){
+//                        if (iter[i] == 0 && sfc.box_min(i) > mission.world_min(i) + SP_EPSILON_FLOAT) {
+//                            delta(i) = -SP_EPSILON_FLOAT;
+//                        }
+//                        else{
+//                            delta(i) = SP_EPSILON_FLOAT;
+//                        }
+//                    }
+//
+//                    search_point = search_point + delta;
+//                    float dist = distmap_ptr->getDistance(search_point);
+//                    if (dist < margin + 0.5 * param.world_resolution - SP_EPSILON_FLOAT) { // Add 0.5 * resolution to avoid numerical error
+//                        return true;
+//                    }
+                }
+            }
+        }
+
+        return false;
+    }
+
+    bool CollisionConstraints::isSFCInBoundary(const SFC& sfc, double margin) {
+        return sfc.box_min.x() > mission.world_min.x() + margin - SP_EPSILON &&
+               sfc.box_min.y() > mission.world_min.y() + margin - SP_EPSILON &&
+               sfc.box_min.z() > mission.world_min.z() + margin - SP_EPSILON &&
+               sfc.box_max.x() < mission.world_max.x() - margin + SP_EPSILON &&
+               sfc.box_max.y() < mission.world_max.y() - margin + SP_EPSILON &&
+               sfc.box_max.z() < mission.world_max.z() - margin + SP_EPSILON;
+    }
+
+    SFC CollisionConstraints::expandSFC(const SFC& initial_sfc, double margin) {
+        if (isObstacleInSFC(initial_sfc, margin)) {
+            bool debug = isObstacleInSFC(initial_sfc, margin);
+            throw std::invalid_argument("[CollisionConstraint] Initial SFC is occluded by obstacle");
+        }
+
+        SFC sfc, sfc_cand, sfc_update;
+        std::vector<int> axis_cand = {0, 1, 2, 3, 4, 5}; // -x, -y, -z, +x, +y, +z
+
+        int i = -1;
+        int axis;
+        sfc = initial_sfc;
+        while (!axis_cand.empty()) {
+            // initialize boxes
+            sfc_cand = sfc;
+            sfc_update = sfc;
+
+            //check collision update_box only! box_current + box_update = box_cand
+//                while (!isObstacleInBox(box_update, margin) && isBoxInBoundary(box_update, margin)) {
+            while (!isObstacleInSFC(sfc_update, margin) && isSFCInBoundary(sfc_update, 0)) {
+                i++;
+                if (i >= axis_cand.size()) {
+                    i = 0;
+                }
+                axis = axis_cand[i];
+
+                //update current box
+                sfc = sfc_cand;
+                sfc_update = sfc_cand;
+
+                //expand box_cand and get updated part of box (box_update)
+                if (axis < 3) {
+                    sfc_update.box_max(axis) = sfc_cand.box_min(axis);
+                    sfc_cand.box_min(axis) = sfc_cand.box_min(axis) - param.world_resolution;
+                    sfc_update.box_min(axis) = sfc_cand.box_min(axis);
+                } else {
+                    sfc_update.box_min(axis - 3) = sfc_cand.box_max(axis - 3);
+                    sfc_cand.box_max(axis - 3) = sfc_cand.box_max(axis - 3) + param.world_resolution;
+                    sfc_update.box_max(axis - 3) = sfc_cand.box_max(axis - 3);
+                }
+            }
+            // if obstacle is in box then do not expand box to the current axis direction
+            axis_cand.erase(axis_cand.begin() + i);
+            if (i > 0) {
+                i--;
+            } else {
+                i = axis_cand.size() - 1;
+            }
+        }
+
+        return sfc;
     }
 }

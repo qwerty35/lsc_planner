@@ -28,15 +28,6 @@ namespace DynamicPlanning{
         service_stop_patrol = nh.advertiseService("/stop_patrol", &MultiSyncSimulator::stopPatrolCallback, this);
         service_update_goal = nh.advertiseService("/update_goal", &MultiSyncSimulator::updateGoalCallback, this);
 
-        agents.resize(mission.qn);
-        for(int qi = 0; qi < mission.qn; qi++){
-            agents[qi] = std::make_unique<TrajPlanner>(qi, nh, param, mission);
-            dynamic_msgs::State initial_state;
-            initial_state.pose.position = point3DToPointMsg(mission.agents[qi].start_position);
-            agents[qi]->setCurrentState(initial_state);
-            agents[qi]->initializeROS();
-        }
-
         msg_agent_trajectories.markers.clear();
         msg_agent_trajectories.markers.resize(mission.qn);
         msg_obstacle_trajectories.markers.clear();
@@ -76,7 +67,15 @@ namespace DynamicPlanning{
         }
 
         if(param.world_use_octomap){
-            setOctomap(mission.world_file_name);
+            setDistmap(mission.world_file_name);
+        }
+
+        agents.resize(mission.qn);
+        for(int qi = 0; qi < mission.qn; qi++){
+            agents[qi] = std::make_unique<TrajPlanner>(qi, nh, param, mission, distmap_ptr);
+            dynamic_msgs::State initial_state;
+            initial_state.pose.position = point3DToPointMsg(mission.agents[qi].start_position);
+            agents[qi]->setCurrentState(initial_state);
         }
     }
 
@@ -150,7 +149,7 @@ namespace DynamicPlanning{
         agents[qi]->setCurrentState(state);
     }
 
-    void MultiSyncSimulator::setOctomap(std::string file_name){
+    void MultiSyncSimulator::setDistmap(const std::string& file_name){
         float max_dist = 1.0; //TODO: parameterization
         octomap::OcTree* octree_ptr;
         octree_ptr = new octomap::OcTree(param.world_resolution);
@@ -158,10 +157,9 @@ namespace DynamicPlanning{
             throw std::invalid_argument("[MultiSyncSimulator] Fail to read octomap file.");
         }
 
-        distmap_obj = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
-                                                          mission.world_min, mission.world_max,
+        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr, mission.world_min, mission.world_max,
                                                           false);
-        distmap_obj->update();
+        distmap_ptr->update();
 
         has_distmap = true;
     }
@@ -205,7 +203,7 @@ namespace DynamicPlanning{
         }
 
         // Measure current state of objects
-        std::vector<octomap::point3d> real_agent_curr_positions;
+        points_t real_agent_curr_positions;
         real_agent_curr_positions.resize(mission.qn);
         for(int qi = 0; qi < mission.qn; qi++) {
             bool external_pose_update = true;
@@ -229,7 +227,7 @@ namespace DynamicPlanning{
         // Update agent's states
         // If difference between ideal and observed position is small, then use ideal position
         for(int qi = 0; qi < mission.qn; qi++) {
-            octomap::point3d ideal_agent_curr_position = pointMsgToPoint3d(ideal_agent_curr_states[qi].pose.position);
+            point_t ideal_agent_curr_position = pointMsgToPoint3d(ideal_agent_curr_states[qi].pose.position);
             double diff = (ideal_agent_curr_position - real_agent_curr_positions[qi]).norm();
             if (diff > param.multisim_reset_threshold) {
                 dynamic_msgs::State current_state = ideal_agent_curr_states[qi];
@@ -276,7 +274,7 @@ namespace DynamicPlanning{
                 obstacle.type = ObstacleType::AGENT;
 
                 // If diff between ideal and observed position is small, then use ideal position
-                octomap::point3d ideal_agent_curr_position = pointMsgToPoint3d(ideal_agent_curr_states[qj].pose.position);
+                point_t ideal_agent_curr_position = pointMsgToPoint3d(ideal_agent_curr_states[qj].pose.position);
                 if((ideal_agent_curr_position - real_agent_curr_positions[qj]).norm() > param.multisim_reset_threshold)
                 {
                     obstacle.pose.position = point3DToPointMsg(real_agent_curr_positions[qj]);
@@ -288,7 +286,7 @@ namespace DynamicPlanning{
                     obstacle.velocity = ideal_agent_next_states[qj].velocity;
                 }
 
-                obstacle.goal_point = point3DToPointMsg(agents[qj]->getDesiredGoalPosition());
+                obstacle.goal = point3DToPointMsg(agents[qj]->getDesiredGoalPosition());
                 obstacle.radius = mission.agents[qj].radius;
                 obstacle.max_acc = mission.agents[qj].max_acc[0];
                 obstacle.downwash = mission.agents[qj].downwash;
@@ -298,13 +296,12 @@ namespace DynamicPlanning{
                 obs_prev_trajs.emplace_back(obs_traj);
             }
 
-            agents[qi]->setDistMap(distmap_obj);
             agents[qi]->setObstacles(msg_obstacles);
             agents[qi]->setObsPrevTrajs(obs_prev_trajs);
-            agents[qi]->updatePlannerState(planner_state);
+            agents[qi]->setPlannerState(planner_state);
 
             if(mission_changed){
-                agents[qi]->setStart(mission.agents[qi].start_position);
+                agents[qi]->setStartPosition(mission.agents[qi].start_position);
                 agents[qi]->setDesiredGoal(mission.agents[qi].desired_goal_position);
             }
         }
@@ -361,7 +358,7 @@ namespace DynamicPlanning{
         }
 
         for(int qi = 0; qi < mission.qn; qi++) {
-            octomap::point3d current_position = agents[qi]->getCurrentPosition();
+            point_t current_position = agents[qi]->getCurrentPosition();
             double dist_to_goal;
             if(planner_state == PlannerState::GOTO){
                 dist_to_goal = (current_position - mission.agents[qi].desired_goal_position).norm();
@@ -448,7 +445,7 @@ namespace DynamicPlanning{
         while(future_time < param.multisim_time_step - SP_EPSILON_FLOAT) {
             for (int qi = 0; qi < mission.qn; qi++) {
                 dynamic_msgs::State agent_state_i = agents[qi]->getFutureStateMsg(future_time);
-                octomap::point3d agent_position_i = pointMsgToPoint3d(agent_state_i.pose.position);
+                point_t agent_position_i = pointMsgToPoint3d(agent_state_i.pose.position);
                 double current_safety_ratio_agent = SP_INFINITY;
                 int min_qj = -1;
                 for (int qj = 0; qj < mission.qn; qj++) {
@@ -458,8 +455,8 @@ namespace DynamicPlanning{
 
                     double downwash = (mission.agents[qi].downwash * mission.agents[qi].radius + mission.agents[qj].downwash * mission.agents[qj].radius) / (mission.agents[qi].radius + mission.agents[qj].radius);
                     dynamic_msgs::State agent_state_j = agents[qj]->getFutureStateMsg(future_time);
-                    octomap::point3d agent_position_j = pointMsgToPoint3d(agent_state_j.pose.position);
-                    double dist_to_agent = distBetweenAgents(agent_position_i, agent_position_j, downwash);
+                    point_t agent_position_j = pointMsgToPoint3d(agent_state_j.pose.position);
+                    double dist_to_agent = ellipsoidalDistance(agent_position_i, agent_position_j, downwash);
 
                     double safety_ratio = dist_to_agent / (mission.agents[qi].radius + mission.agents[qj].radius);
                     if (safety_ratio < current_safety_ratio_agent) {
@@ -480,7 +477,7 @@ namespace DynamicPlanning{
                 double current_safety_margin_obs = SP_INFINITY;
                 for (int oi = 0; oi < mission.on; oi++) {
                     dynamic_msgs::Obstacle obstacle = obstacle_generator.getObstacle(oi);
-                    octomap::point3d obs_position = pointMsgToPoint3d(obstacle.pose.position);
+                    point_t obs_position = pointMsgToPoint3d(obstacle.pose.position);
                     double dist_to_obs = (agent_position_i - obs_position).norm();
 
                     double safety_ratio = dist_to_obs / (mission.agents[qi].radius + obstacle.radius);
@@ -542,17 +539,17 @@ namespace DynamicPlanning{
         while(future_time < param.multisim_time_step) {
             for (int qi = 0; qi < mission.qn; qi++) {
                 result_csv << qi << "," << t << ","
-                           << agents[qi]->getFutureStateMsg(future_time).pose.position.x << ","
-                           << agents[qi]->getFutureStateMsg(future_time).pose.position.y << ","
-                           << agents[qi]->getFutureStateMsg(future_time).pose.position.z << ","
-                           << agents[qi]->getFutureStateMsg(future_time).velocity.linear.x << ","
-                           << agents[qi]->getFutureStateMsg(future_time).velocity.linear.y << ","
-                           << agents[qi]->getFutureStateMsg(future_time).velocity.linear.z << ","
-                           << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.x << ","
-                           << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.y << ","
-                           << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.z << ","
-                           << agents[qi]->getPlanningTime().total_planning_time.current << ","
-                           << agents[qi]->getQPCost() << ","
+                        << agents[qi]->getFutureStateMsg(future_time).pose.position.x << ","
+                        << agents[qi]->getFutureStateMsg(future_time).pose.position.y << ","
+                        << agents[qi]->getFutureStateMsg(future_time).pose.position.z << ","
+                        << agents[qi]->getFutureStateMsg(future_time).velocity.linear.x << ","
+                        << agents[qi]->getFutureStateMsg(future_time).velocity.linear.y << ","
+                        << agents[qi]->getFutureStateMsg(future_time).velocity.linear.z << ","
+                        << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.x << ","
+                        << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.y << ","
+                        << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.z << ","
+                        << agents[qi]->getPlanningTime().total_planning_time.current << ","
+                        << agents[qi]->getTrajCost() << ","
                            << agents[qi]->getPlanningReport() << ","
                            << mission.agents[qi].radius;
 
@@ -602,7 +599,7 @@ namespace DynamicPlanning{
                            << "initial_traj_planning_time,obstacle_prediction_time,goal_planning_time,"
                            << "lsc_generation_time,sfc_generation_time,traj_optimization_time,"
                            << "mission_file_name,world_file_name,planner_mode,prediction_mode,initial_traj_mode,"
-                           << "slack_mode,goal_mode,world_dimension,dt,horizon,N_constraint_segments\n";
+                           << "slack_mode,goal_mode,world_dimension,M,dt,N_constraint_segments\n";
         }
         result_csv_out << sim_start_time << ","
                        << total_flight_time << ","
@@ -626,8 +623,8 @@ namespace DynamicPlanning{
                        << param.getSlackModeStr() << ","
                        << param.getGoalModeStr() << ","
                        << param.world_dimension << ","
+                       << param.M << ","
                        << param.dt << ","
-                       << param.horizon << ","
                        << param.N_constraint_segments << "\n";
         result_csv_out.close();
     }
@@ -656,7 +653,7 @@ namespace DynamicPlanning{
         normal_csv << t << ",";
         for (int qi = 0; qi < mission.qn; qi++) {
             for (int qj = qi + 1; qj < mission.qn; qj++) {
-                octomap::point3d normal_vector = agents[qi]->getNormalVector(qj, 0) + agents[qj]->getNormalVector(qi, 0);
+                point_t normal_vector = agents[qi]->getNormalVector(qj, 0) + agents[qj]->getNormalVector(qi, 0);
                 normal_csv << normal_vector.x();
                 if(qi == mission.qn - 2){
                     normal_csv << "\n";
@@ -686,10 +683,10 @@ namespace DynamicPlanning{
 
         float max_dist = 1.0; //TODO: parameterization
         auto* octree_ptr = dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(octomap_msg));
-        distmap_obj = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
+        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
                                                           mission.world_min, mission.world_max,
                                                           false);
-        distmap_obj->update();
+        distmap_ptr->update();
         has_distmap = true;
     }
 
@@ -772,10 +769,10 @@ namespace DynamicPlanning{
             marker.scale.y = 0.1;
             marker.scale.z = 0.1;
             marker.pose.position = point3DToPointMsg(mission.agents[qi].start_position);
-            marker.pose.orientation = point3DToQuaternionMsg(octomap::point3d(0,0,0));
+            marker.pose.orientation = point3DToQuaternionMsg(point_t(0,0,0));
             msg_start_goal_points_vis.markers.emplace_back(marker);
 
-            octomap::point3d agent_desired_goal = agents[qi]->getDesiredGoalPosition();
+            point_t agent_desired_goal = agents[qi]->getDesiredGoalPosition();
             marker.ns = "desired_goal";
             marker.id = qi;
             marker.type = visualization_msgs::Marker::CUBE;
@@ -786,7 +783,7 @@ namespace DynamicPlanning{
             marker.pose.orientation = defaultQuaternion();
             msg_start_goal_points_vis.markers.emplace_back(marker);
 
-            octomap::point3d agent_current_goal = agents[qi]->getCurrentGoalPosition();
+            point_t agent_current_goal = agents[qi]->getCurrentGoalPosition();
             marker.ns = "current_goal";
             marker.id = qi;
             marker.type = visualization_msgs::Marker::SPHERE;
@@ -794,7 +791,7 @@ namespace DynamicPlanning{
             marker.scale.y = 0.1;
             marker.scale.z = 0.1;
             marker.pose.position = point3DToPointMsg(agent_current_goal);
-            marker.pose.orientation = point3DToQuaternionMsg(octomap::point3d(0,0,0));
+            marker.pose.orientation = point3DToQuaternionMsg(point_t(0,0,0));
             msg_start_goal_points_vis.markers.emplace_back(marker);
 
             dynamic_msgs::Goal goal;
@@ -940,7 +937,7 @@ namespace DynamicPlanning{
             marker.pose.orientation = defaultQuaternion();
 
             double dt = 0.1;
-            int n_interval = floor((param.horizon + SP_EPSILON) / dt);
+            int n_interval = floor((param.M * param.dt + SP_EPSILON) / dt);
             for (int i = 0; i < n_interval; i++) {
                 double future_time = i * dt;
                 dynamic_msgs::State traj_point = agents[qi]->getFutureStateMsg(future_time);
@@ -961,10 +958,10 @@ namespace DynamicPlanning{
             return;
         }
 
-        GridBasedPlanner grid_based_planner(distmap_obj, mission, param);
+        GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
         grid_based_planner.plan(mission.agents[0].start_position, mission.agents[0].start_position, 0,
                                 mission.agents[0].radius, mission.agents[0].downwash);
-        std::vector<octomap::point3d> free_grid_points = grid_based_planner.getFreeGridPoints();
+        points_t free_grid_points = grid_based_planner.getFreeGridPoints();
 
         visualization_msgs::MarkerArray msg_grid_map;
         visualization_msgs::Marker marker;
