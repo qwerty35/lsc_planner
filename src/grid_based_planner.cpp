@@ -322,32 +322,16 @@ namespace DynamicPlanning {
         return free_grid_points;
     }
 
-    point_t GridBasedPlanner::findLOSFreeGoal(const point_t& current_position,
-                                                       const point_t& goal_position,
-                                                       const std::vector<Obstacle>& obstacles,
-                                                       double agent_radius,
-                                                       const points_t& additional_check_positions) {
+    point_t GridBasedPlanner::findLOSFreeGoal(const point_t& current_position, const point_t& goal_position,
+                                              const std::vector<Obstacle>& obstacles, double agent_radius) {
         point_t los_free_goal = current_position;
 
         points_t path = plan_result.path;
         path.emplace_back(goal_position);
 
-        points_t start_positions = additional_check_positions;
-        start_positions.emplace_back(current_position);
-
-        for (int i = 0; i < 6; i++) {
-            double margin_ratio = 1.5 - 0.1 * i;
+        if (distmap_ptr != nullptr) {
             for (const auto &point : path) {
-                bool is_safe = true;
-                for (const auto &start_position: start_positions) {
-                    if (is_safe and distmap_ptr != nullptr) {
-                        is_safe = castRay(start_position, point, agent_radius * margin_ratio);
-                    }
-
-                    if (not is_safe) {
-                        break;
-                    }
-                }
+                bool is_safe = castRay(current_position, point, agent_radius);
 
                 if (is_safe) {
                     los_free_goal = point;
@@ -356,16 +340,16 @@ namespace DynamicPlanning {
                     break;
                 }
             }
-
-            if((los_free_goal - current_position).norm() > 0.3){
-                break;
-            }
         }
 
-        point_t delta = los_free_goal - current_position;
-        if(delta.norm() > param.goal_radius){
-            los_free_goal = current_position + delta.normalized() * param.goal_radius;
+        if(los_free_goal.distance(current_position) < SP_EPSILON_FLOAT and path.size() > 2){
+            los_free_goal = path[1];
         }
+
+//        point_t delta = los_free_goal - current_position;
+//        if(delta.norm() > param.goal_radius){
+//            los_free_goal = current_position + delta.normalized() * param.goal_radius;
+//        }
 
         return los_free_goal;
     }
@@ -378,8 +362,17 @@ namespace DynamicPlanning {
         double max_dist = 1.0; //TODO: parameterization
         dist_to_goal = (current_position - goal_position).norm();
         dist_threshold = sqrt(0.25 * dist_to_goal * dist_to_goal + agent_radius * agent_radius);
-        safe_dist_curr = distmap_ptr->getDistance(current_position);
-        safe_dist_goal = distmap_ptr->getDistance(goal_position);
+
+//        safe_dist_curr = distmap_ptr->getDistance(current_position);
+//        safe_dist_goal = distmap_ptr->getDistance(goal_position);
+
+        float dist;
+        point_t closest_point;
+        distmap_ptr->getDistanceAndClosestObstacle(current_position, dist, closest_point);
+        safe_dist_curr = current_position.distance(closest_point);
+
+        distmap_ptr->getDistanceAndClosestObstacle(goal_position, dist, closest_point);
+        safe_dist_goal = goal_position.distance(closest_point);
 
         if(safe_dist_curr < agent_radius + 0.5 * param.world_resolution - SP_EPSILON_FLOAT){
             return false;

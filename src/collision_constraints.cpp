@@ -247,18 +247,20 @@ namespace DynamicPlanning{
     void CollisionConstraints::generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
                                                    const points_t& grid_path, double agent_radius){
         // Update sfc library using discrete path
-        for(int i = 0; i < grid_path.size() - 1; i++){
-            Line line_curr = Line(grid_path[i], grid_path[i + 1]);
-            bool update = true;
-            for(const auto& sfc : sfc_library){
-                if(sfc.isLineInSFC(line_curr)){
-                    update = false;
-                    break;
+        if(not grid_path.empty()) {
+            for (int i = 0; i < grid_path.size() - 1; i++) {
+                Line line_curr = Line(grid_path[i], grid_path[i + 1]);
+                bool update = true;
+                for (const auto &sfc: sfc_library) {
+                    if (sfc.isLineInSFC(line_curr)) {
+                        update = false;
+                        break;
+                    }
                 }
-            }
 
-            if(update) {
-                sfc_library.emplace_back(expandSFCFromLine(line_curr, agent_radius));
+                if (update) {
+                    sfc_library.emplace_back(expandSFCFromLine(line_curr, agent_radius));
+                }
             }
         }
 

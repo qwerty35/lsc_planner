@@ -7,6 +7,7 @@ Panels:
         - /Global Options1
         - /Grid1
         - /TF1
+        - /StartGoal1
         - /StartGoal1/Namespaces1
         - /CollisionAlert1
         - /CmdFullState1/Namespaces1
@@ -245,8 +246,8 @@ Visualization Manager:
       Name: StartGoal
       Namespaces:
         current_goal: true
-        desired_goal: true
-        start: true
+        desired_goal: false
+        start: false
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -291,13 +292,13 @@ Visualization Manager:
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /mav6_grid_path_vis
       Name: GridPath
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
       Enabled: false
       Marker Topic: /grid_map
@@ -333,21 +334,26 @@ Visualization Manager:
   Value: true
   Views:
     Current:
-      Angle: 0
-      Class: rviz/TopDownOrtho
+      Class: rviz/XYOrbit
+      Distance: 10.31752872467041
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
+      Focal Point:
+        X: 0.38679778575897217
+        Y: 2.426089286804199
+        Z: 0
+      Focal Shape Fixed Size: true
+      Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 160.57232666015625
+      Pitch: 1.1666277647018433
       Target Frame: <Fixed Frame>
-      Value: TopDownOrtho (rviz)
-      X: -0.3411717116832733
-      Y: 0.5023548007011414
+      Value: XYOrbit (rviz)
+      Yaw: 1.000773310661316
     Saved: ~
 Window Geometry:
   Displays:

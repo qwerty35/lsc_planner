@@ -97,8 +97,7 @@ namespace DynamicPlanning {
         point_t findLOSFreeGoal(const point_t& current_position,
                                 const point_t& goal_position,
                                 const std::vector<Obstacle>& obstacles,
-                                double agent_radius,
-                                const points_t& additional_check_positions = {});
+                                double agent_radius);
 
     private:
         Mission mission;
