@@ -323,7 +323,7 @@ namespace DynamicPlanning {
     }
 
     point_t GridBasedPlanner::findLOSFreeGoal(const point_t& current_position, const point_t& goal_position,
-                                              const std::vector<Obstacle>& obstacles, double agent_radius) {
+                                              double agent_radius) {
         point_t los_free_goal = current_position;
 
         points_t path = plan_result.path;
@@ -345,11 +345,6 @@ namespace DynamicPlanning {
         if(los_free_goal.distance(current_position) < SP_EPSILON_FLOAT and path.size() > 2){
             los_free_goal = path[1];
         }
-
-//        point_t delta = los_free_goal - current_position;
-//        if(delta.norm() > param.goal_radius){
-//            los_free_goal = current_position + delta.normalized() * param.goal_radius;
-//        }
 
         return los_free_goal;
     }

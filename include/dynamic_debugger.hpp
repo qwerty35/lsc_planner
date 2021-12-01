@@ -435,7 +435,7 @@ private:
         point_t box_max = pointMsgToPoint3d(msg_collision_constraints.sfcs[m].box_max);
         SFC box(box_min, box_max);
 
-        visualization_msgs::Marker marker = box.convertToMarker(agent_radius);
+        visualization_msgs::Marker marker = box.convertToMarker(agent_radius, "world");
         marker.id = 0;
         marker.ns = "SFC";
         marker.color = colormap[agent_id];

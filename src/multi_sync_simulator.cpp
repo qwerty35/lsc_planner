@@ -345,11 +345,9 @@ namespace DynamicPlanning{
         }
         obstacle_generator.publish();
         publishAgentState();
-        if(param.multisim_experiment){
-            publishDesiredTrajs();
-        }
+        publishDesiredTrajs();
 
-        publishGridMap();
+//        publishGridMap();
     }
 
     bool MultiSyncSimulator::isFinished(){
@@ -941,11 +939,25 @@ namespace DynamicPlanning{
             for (int i = 0; i < n_interval; i++) {
                 double future_time = i * dt;
                 dynamic_msgs::State traj_point = agents[qi]->getFutureStateMsg(future_time);
-
                 marker.points.emplace_back(traj_point.pose.position);
             }
             msg_desired_trajs_vis.markers.emplace_back(marker);
+
+            //Last point
+            marker.points.clear();
+            marker.type = visualization_msgs::Marker::SPHERE;
+            marker.ns = "last_point";
+            marker.id = qi;
+            marker.color.a = 0.3;
+            marker.scale.x = 2 * mission.agents[qi].radius;
+            marker.scale.y = 2 * mission.agents[qi].radius;
+            marker.scale.z = 2 * mission.agents[qi].radius * mission.agents[qi].downwash;
+            dynamic_msgs::State traj_point = agents[qi]->getFutureStateMsg(param.M * param.dt);
+            marker.pose.position = traj_point.pose.position;
+            marker.pose.orientation = defaultQuaternion();
+            msg_desired_trajs_vis.markers.emplace_back(marker);
         }
+
         pub_desired_trajs_vis.publish(msg_desired_trajs_vis);
     }
 

@@ -205,7 +205,7 @@ namespace DynamicPlanning{
 
         for(int qi = 0; qi < mission.qn; qi++) {
             visualization_msgs::Marker marker_agent;
-            marker_agent.header.frame_id = "world";
+            marker_agent.header.frame_id = param.world_frame_id;
             marker_agent.type = visualization_msgs::Marker::SPHERE;
             marker_agent.action = visualization_msgs::Marker::ADD;
             marker_agent.color = mission.color[qi];
@@ -222,7 +222,7 @@ namespace DynamicPlanning{
 
         for(int oi = 0; oi < mission.on; oi++){
             visualization_msgs::Marker marker_obstacle;
-            marker_obstacle.header.frame_id = "world";
+            marker_obstacle.header.frame_id = param.world_frame_id;
             marker_obstacle.type = visualization_msgs::Marker::SPHERE;
             marker_obstacle.action = visualization_msgs::Marker::ADD;
             marker_obstacle.color.a = 0.5;

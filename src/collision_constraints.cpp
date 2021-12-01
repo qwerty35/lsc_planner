@@ -6,9 +6,9 @@ namespace DynamicPlanning{
              double _d)
             : obs_control_point(_obs_control_point), normal_vector(_normal_vector), d(_d) {}
 
-    visualization_msgs::Marker LSC::convertToMarker(double agent_radius) const{
+    visualization_msgs::Marker LSC::convertToMarker(double agent_radius, const std::string& world_frame_id) const{
         visualization_msgs::Marker msg_marker;
-        msg_marker.header.frame_id = "world"; //TODO: frame id parameterization
+        msg_marker.header.frame_id = world_frame_id;
         msg_marker.type = visualization_msgs::Marker::CUBE;
         msg_marker.action = visualization_msgs::Marker::ADD;
 
@@ -58,9 +58,9 @@ namespace DynamicPlanning{
         return lscs;
     }
 
-    visualization_msgs::Marker SFC::convertToMarker(double agent_radius) const{
+    visualization_msgs::Marker SFC::convertToMarker(double agent_radius, const std::string& world_frame_id) const{
         visualization_msgs::Marker msg_marker;
-        msg_marker.header.frame_id = "world"; //TODO: frame id
+        msg_marker.header.frame_id = world_frame_id; //TODO: frame id
         msg_marker.type = visualization_msgs::Marker::LINE_LIST;
         msg_marker.action = visualization_msgs::Marker::ADD;
         msg_marker.pose.position = defaultPoint();
@@ -162,6 +162,27 @@ namespace DynamicPlanning{
         }
 
         return (point - closest_point).norm();
+    }
+
+    double SFC::distanceToInnerPoint(const point_t& point) const{
+        if(not isPointInSFC(point)){
+            return 0;
+        }
+
+        double dist, min_dist = SP_INFINITY;
+        for(int i = 0; i < 3; i++){
+            dist = abs(point(i) - box_min(i));
+            if(dist < min_dist){
+                min_dist = dist;
+            }
+
+            dist = abs(point(i)) - box_max(i);
+            if(dist < min_dist){
+                min_dist = dist;
+            }
+        }
+
+        return min_dist;
     }
 
     points_t SFC::getVertices() const{
@@ -276,6 +297,7 @@ namespace DynamicPlanning{
             Line line(last_point, current_goal_position);
             if(sfc.isLineInSFC(line)){
                 sfc_update = sfc;
+                min_dist_to_goal = -1;
                 break;
             }
             else if(sfc.isPointInSFC(last_point)){
@@ -375,7 +397,7 @@ namespace DynamicPlanning{
 
             for (int m = 0; m < M; m++) {
 //                visualization_msgs::Marker msg_marker = lscs[oi][m][0].convertToMarker(agent_radius);
-                visualization_msgs::Marker msg_marker = lscs[oi][m][0].convertToMarker(0);
+                visualization_msgs::Marker msg_marker = lscs[oi][m][0].convertToMarker(0, param.world_frame_id);
                 msg_marker.id = m * N_obs + oi;
                 msg_marker.ns = "LSC" + std::to_string(m);
                 msg_marker.color = marker_color;
@@ -399,7 +421,7 @@ namespace DynamicPlanning{
         msg_marker_array.markers.clear();
         for (int m = 0; m < M; m++) {
 //            visualization_msgs::Marker msg_marker = sfcs[m].box.convertToMarker(agent_radius);
-            visualization_msgs::Marker msg_marker = sfcs[m].convertToMarker(0);
+            visualization_msgs::Marker msg_marker = sfcs[m].convertToMarker(0, param.world_frame_id);
             msg_marker.id = m;
             msg_marker.ns = "SFC" + std::to_string(m);
             msg_marker.color = color;

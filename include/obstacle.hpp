@@ -21,12 +21,12 @@ namespace DynamicPlanning {
 
         dynamic_msgs::Obstacle getObstacle(double t){
             dynamic_msgs::Obstacle obstacle = getObstacle_impl(t);
-            if(type == "static"){
-                obstacle.type = ObstacleType::STATICOBSTACLE;
-            }
-            else{
+//            if(type == "static"){
+//                obstacle.type = ObstacleType::STATICOBSTACLE;
+//            }
+//            else{
                 obstacle.type = ObstacleType::DYNAMICOBSTACLE;
-            }
+//            }
             obstacle.max_acc = max_acc;
             obstacle.radius = radius;
             obstacle.downwash = downwash;

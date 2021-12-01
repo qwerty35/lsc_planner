@@ -21,7 +21,7 @@ namespace DynamicPlanning {
         LSC(const point_t& obs_control_point,
             const point_t& normal_vector,
             double d);
-        visualization_msgs::Marker convertToMarker(double agent_radius) const;
+        visualization_msgs::Marker convertToMarker(double agent_radius, const std::string& world_frame_id) const;
 
         point_t obs_control_point;
         point_t normal_vector;
@@ -41,7 +41,8 @@ namespace DynamicPlanning {
         SFC(const point_t& box_min, const point_t& box_max);
 
         [[nodiscard]] LSCs convertToLSCs(int dim) const;
-        [[nodiscard]] visualization_msgs::Marker convertToMarker(double agent_radius) const;
+        [[nodiscard]] visualization_msgs::Marker convertToMarker(double agent_radius,
+                                                                 const std::string& world_frame_id) const;
 
         [[nodiscard]] bool isPointInSFC(const point_t& point) const;
         [[nodiscard]] bool isLineInSFC(const Line& line) const;
@@ -53,6 +54,7 @@ namespace DynamicPlanning {
         [[nodiscard]] SFC intersection(const SFC& other_sfc) const;
 
         [[nodiscard]] double distanceToPoint(const point_t& point) const;
+        [[nodiscard]] double distanceToInnerPoint(const point_t& point) const;
 
         [[nodiscard]] points_t getVertices() const;
         [[nodiscard]] lines_t getEdges() const;
@@ -74,16 +76,14 @@ namespace DynamicPlanning {
         void generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
                                  const points_t& grid_path, double agent_radius);
 
-        void updateSFCLibrary();
-
         // Getter
-        LSC getLSC(int oi, int m, int i) const;
+        [[nodiscard]] LSC getLSC(int oi, int m, int i) const;
 
-        SFC getSFC(int m) const;
+        [[nodiscard]] SFC getSFC(int m) const;
 
-        size_t getObsSize() const;
+        [[nodiscard]] size_t getObsSize() const;
 
-        std::set<int> getSlackIndices() const;
+        [[nodiscard]] std::set<int> getSlackIndices() const;
 
         // Setter
         void setLSC(int oi, int m,
@@ -99,11 +99,12 @@ namespace DynamicPlanning {
         void setSFC(int m, const SFC& sfc);
 
         // Converter
-        visualization_msgs::MarkerArray convertToMarkerArrayMsg(const std::vector<Obstacle>& obstacles,
-                                                                const std::vector<std_msgs::ColorRGBA>& colors,
-                                                                int agent_id, double agent_radius) const;
-        dynamic_msgs::CollisionConstraint convertToRawMsg(const std::vector<Obstacle>& obstacles,
-                                                          int planner_seq) const;
+        [[nodiscard]] visualization_msgs::MarkerArray convertToMarkerArrayMsg(
+                const std::vector<Obstacle>& obstacles,
+                const std::vector<std_msgs::ColorRGBA>& colors,
+                int agent_id, double agent_radius) const;
+        [[nodiscard]] dynamic_msgs::CollisionConstraint convertToRawMsg(const std::vector<Obstacle>& obstacles,
+                                                                        int planner_seq) const;
 
     private:
         std::shared_ptr<DynamicEDTOctomap> distmap_ptr;
@@ -113,21 +114,21 @@ namespace DynamicPlanning {
         RSFCs lscs;
         SFCs sfcs;
         std::set<int> obs_slack_indices;
-        int N_obs, M, n;
-        double dt;
+        int N_obs = 0, M = 0, n = 0;
+        double dt = 0;
         SFCs sfc_library;
 
-        visualization_msgs::MarkerArray convertLSCsToMarkerArrayMsg(
+        [[nodiscard]] visualization_msgs::MarkerArray convertLSCsToMarkerArrayMsg(
                 const std::vector<Obstacle>& obstacles,
                 const std::vector<std_msgs::ColorRGBA>& colors,
                 double agent_radius) const;
 
-        visualization_msgs::MarkerArray convertSFCsToMarkerArrayMsg(const std_msgs::ColorRGBA& color,
-                                                                    double agent_radius) const;
+        [[nodiscard]] visualization_msgs::MarkerArray convertSFCsToMarkerArrayMsg(const std_msgs::ColorRGBA& color,
+                                                                                  double agent_radius) const;
 
         SFC expandSFCFromPoint(const point_t& point, double agent_radius);
         SFC expandSFCFromLine(const Line& line, double agent_radius);
-        std::vector<double> initializeBoxFromPoints(const points_t& points) const;
+        [[nodiscard]] std::vector<double> initializeBoxFromPoints(const points_t& points) const;
         bool isObstacleInSFC(const SFC& initial_sfc, double margin);
         bool isSFCInBoundary(const SFC& sfc, double margin);
         SFC expandSFC(const SFC& initial_sfc, double margin);

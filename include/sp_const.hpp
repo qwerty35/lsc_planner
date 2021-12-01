@@ -133,7 +133,6 @@ namespace DynamicPlanning {
     };
 
     enum ObstacleType {
-        STATICOBSTACLE,
         DYNAMICOBSTACLE,
         AGENT,
     };
