@@ -673,22 +673,66 @@ namespace DynamicPlanning{
 //                                              (obs_future_position - agent_future_position).normalized().cross(z_axis) * dist_keep;
 //            }
 
-            // cand3
-            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
-            if(sfc.distanceToInnerPoint(agent_future_position) > 0.1){
-                point_t z_axis(0, 0, 1);
-                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-//                double delta_z = (obs_future_position - obs_current_position).cross(agent_future_position - obs_current_position).z();
-                point_t rotate_vector;
-//                if(delta_z > 0){
-                    rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
-//                }
-//                else{
-//                    rotate_vector = (agent.desired_goal_position - agent_future_position).cross(-z_axis);
-//                }
+//            // cand3
+//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
+//            if(sfc.distanceToInnerPoint(agent_future_position) > 0.1){
+//                point_t z_axis(0, 0, 1);
+//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
+//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
+//                point_t rotate_vector;
+//                rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
+//
+//                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
+//            }
+//            else{
+//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
+//                agent.current_goal_position = agent.current_state.position +
+//                        (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
+//            }
 
-                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
+//            // cand5
+//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
+//            if(sfc.distanceToInnerPoint(agent_future_position) > 0.01){
+//                point_t z_axis(0, 0, 1);
+//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
+//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
+//                point_t rotate_vector;
+//                rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
+//
+//                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
+//            }
+//            else{
+//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
+//                agent.current_goal_position = agent.current_state.position +
+//                                              (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
+//            }
+
+//            // cand6
+//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
+//            if(sfc.distanceToInnerPoint(agent_future_position) > 0.2){
+//                point_t z_axis(0, 0, 1);
+//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
+//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
+//                point_t rotate_vector;
+//                rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
+//
+//                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
+//            }
+//            else{
+//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
+//                agent.current_goal_position = agent.current_state.position +
+//                                              (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
+//            }
+
+            // cand7
+            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 2.0;
+            point_t z_axis(0, 0, 1);
+            point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
+            point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
+            point_t right_hand_direction = (obs_future_position - agent_future_position).cross(z_axis).normalized();
+            double right_hand_margin = sfc.raycastFromInnerPoint(agent_future_position, right_hand_direction);
+            if(right_hand_margin > 0.1){
+                agent.current_goal_position = agent_future_position + right_hand_direction.normalized() * std::min(right_hand_margin, dist_keep);
             }
             else{
                 point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
@@ -714,6 +758,7 @@ namespace DynamicPlanning{
 
         // Find higher_priority_agents
         std::set<int> higher_priority_agents; // set of obstacle id
+//        higher_priority_agents.emplace(obstacles[highest_priority_obs_idx].id);
         for(int oi = 0; oi < N_obs; oi++) {
             if (obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE or
                 obs_slack_indices.find(oi) != obs_slack_indices.end()) {
@@ -723,6 +768,11 @@ namespace DynamicPlanning{
                 point_t obs_goal_position = obstacles[oi].goal_position;
                 point_t obs_curr_position = obstacles[oi].position;
                 point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
+
+                //cand4 = cand3
+                if(obs_curr_position.distance(agent.current_state.position) > 3.0){
+                    continue;
+                }
 
                 double obs_dist_to_goal = obs_curr_position.distance(obs_goal_position);
                 double dist_to_obs = obs_curr_position.distance(agent.current_state.position);
@@ -737,6 +787,7 @@ namespace DynamicPlanning{
                 }
             }
         }
+
 
         // A* considering priority
         GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);

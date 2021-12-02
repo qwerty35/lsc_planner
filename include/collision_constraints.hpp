@@ -55,6 +55,7 @@ namespace DynamicPlanning {
 
         [[nodiscard]] double distanceToPoint(const point_t& point) const;
         [[nodiscard]] double distanceToInnerPoint(const point_t& point) const;
+        [[nodiscard]] double raycastFromInnerPoint(const point_t& point, const point_t& direction) const;
 
         [[nodiscard]] points_t getVertices() const;
         [[nodiscard]] lines_t getEdges() const;

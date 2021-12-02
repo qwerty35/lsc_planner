@@ -185,6 +185,46 @@ namespace DynamicPlanning{
         return min_dist;
     }
 
+    double SFC::raycastFromInnerPoint(const point_t& inner_point, const point_t& direction) const{
+        if(not isPointInSFC(inner_point)){
+            return 0;
+        }
+
+        double a, b, k, min_dist = SP_INFINITY;
+
+        for(int i = 0; i < 3; i++){
+            point_t n_surface;
+            n_surface(i) = 1;
+            a = (box_min - inner_point).dot(n_surface);
+            b = direction.dot(n_surface);
+            if(abs(b) < SP_EPSILON_FLOAT) {
+                continue;
+            }
+
+            k = a / b;
+            if(k > 0 and k < min_dist){
+                min_dist = k;
+            }
+        }
+
+        for(int i = 0; i < 3; i++){
+            point_t n_surface;
+            n_surface(i) = -1;
+            a = (box_max - inner_point).dot(n_surface);
+            b = direction.dot(n_surface);
+            if(abs(b) < SP_EPSILON_FLOAT) {
+                continue;
+            }
+
+            k = a / b;
+            if(k > 0 and k < min_dist){
+                min_dist = k;
+            }
+        }
+
+        return min_dist;
+    }
+
     points_t SFC::getVertices() const{
         points_t vertices;
         vertices.emplace_back(box_min);
@@ -310,6 +350,7 @@ namespace DynamicPlanning{
         }
 
         if(min_dist_to_goal == SP_INFINITY){
+            ROS_WARN("min_dist_to_goal = SP_INF!!!!");
             try{
                 sfc_update = expandSFCFromPoint(last_point, agent_radius);
             }
