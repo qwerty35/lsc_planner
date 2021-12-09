@@ -73,6 +73,7 @@ namespace DynamicPlanning {
         RIGHTHAND,
         PRIORBASED,
         PRIORBASED2,
+        PRIORBASED3,
     };
 
     enum PlannerState {

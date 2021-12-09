@@ -14,6 +14,7 @@ namespace DynamicPlanning{
         flag_current_state.is_updated = false;
         flag_obstacles.is_updated = false;
         flag_initialize_sfc = true;
+        prior_obs_id = -1;
 
         // Initialize trajectory param, offsets
         dim = param.world_dimension;
@@ -264,7 +265,7 @@ namespace DynamicPlanning{
     }
 
     vector_t TrajPlanner::getNormalVector(int obs_id, int m) const{
-        int oi = findObstacleIdxById(obs_id);
+        int oi = findObstacleIdxByObsId(obs_id);
         if(oi == -1){
             throw std::invalid_argument("[TrajPlanner] invalid mav_id for normalVector");
         }
@@ -443,6 +444,9 @@ namespace DynamicPlanning{
             case GoalMode::PRIORBASED2:
                 goalPlanningWithPriority2();
                 break;
+            case GoalMode::PRIORBASED3:
+                goalPlanningWithPriority3();
+                break;
             default:
                 throw std::invalid_argument("[TrajPlanner] Invalid goal mode");
                 break;
@@ -540,23 +544,81 @@ namespace DynamicPlanning{
         }
 
         // Find los-free goal from end of the initial trajectory
-        grid_los_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n], agent.desired_goal_position,
-                                                           agent.radius);
-
-        agent.current_goal_position = grid_los_goal;
+        point_t los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
+                                                                   agent.desired_goal_position,
+                                                                   agent.radius);
+        agent.current_goal_position = los_free_goal;
     }
 
     void TrajPlanner::goalPlanningWithPriority2() {
+        // Find higher_priority_agents
+        std::set<int> higher_priority_agents; // set of obstacle id
         double agent_dist_to_goal = agent.current_state.position.distance(agent.desired_goal_position);
-        point_t agent_future_position = initial_traj[M-1][n];
+        for(int oi = 0; oi < N_obs; oi++) {
+            if (obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE or
+                obs_slack_indices.find(oi) != obs_slack_indices.end()) {
+                higher_priority_agents.emplace(obstacles[oi].id);
+                continue;
+            } else if (obstacles[oi].type == ObstacleType::AGENT) {
+                point_t obs_goal_position = obstacles[oi].goal_position;
+                point_t obs_curr_position = obstacles[oi].position;
+                point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
 
+                if(obs_curr_position.distance(agent.current_state.position) > 3.0){ //TODO: parameter
+                    continue;
+                }
+
+                // Impose the higher priority to the agents with smaller dist_to_goal
+                // Do not consider the agents that have the same direction.
+                // Do not consider the agent that is near goal.
+                double obs_dist_to_goal = obs_curr_position.distance(obs_goal_position);
+                if (obs_dist_to_goal > param.goal_threshold and
+                    (obs_future_position - obs_curr_position).dot(obs_curr_position - agent.current_state.position) < 0 and
+                    obs_dist_to_goal < agent_dist_to_goal) {
+                    higher_priority_agents.emplace(obstacles[oi].id);
+                }
+            }
+        }
+
+        // A* considering priority
+        GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
+        grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
+                                            agent.id, agent.radius, agent.downwash,
+                                            obstacles, higher_priority_agents);
+
+        if(grid_path.empty()) {
+            // A* without priority
+            grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
+                                                agent.id, agent.radius, agent.downwash,
+                                                obstacles);
+        }
+
+        // Find los-free goal from end of the initial trajectory
+        point_t los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
+                                                                   agent.desired_goal_position,
+                                                                   agent.radius);
+
+        // Check prior obstacle has passed.
+        //TODO: ghost
+        if(prior_obs_id != -1) {
+            int prior_obs_idx = findObstacleIdxByObsId(prior_obs_id);
+            point_t prior_obs_future_position = obs_pred_trajs[prior_obs_idx][M - 1][n];
+            ClosestPoints closest_points = closestPointsBetweenPointAndLineSegment(prior_obs_future_position,
+                                                                                   agent.current_state.position,
+                                                                                   los_free_goal);
+            double dist = closest_points.dist;
+            if (dist > agent.radius + obstacles[prior_obs_idx].radius) {
+                prior_obs_id = -1;
+            }
+        }
 
         // Find cluster
         std::set<int> cluster; // set of obstacle idx
         std::queue<int> search_queue; // queue of obstacle idx
-        int highest_priority_obs_idx = -1;
+        point_t agent_future_position = initial_traj[M-1][n];
+        int prior_obs_cand_idx = -1;
         double min_dist_to_goal = SP_INFINITY;
-        double cluster_margin = 0.001;
+        double cluster_margin = 0.1;
         for(int oi = 0; oi < N_obs; oi++) {
             if (obstacles[oi].type == ObstacleType::AGENT) {
                 point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
@@ -572,9 +634,9 @@ namespace DynamicPlanning{
                     // If the agent is near goal, all other agents have higher priority
                     // Else the agents with smaller dist_to_goal have higher priority
                     // Do not consider the priority when other agent is near goal.
-                    double obs_dist_to_goal = obstacles[oi].position.distance(obstacles[oi].goal_position);
+                    double obs_dist_to_goal = distanceToGoalByObsIdx(oi);
                     if (obs_dist_to_goal > param.goal_threshold and obs_dist_to_goal < min_dist_to_goal) {
-                        highest_priority_obs_idx = oi;
+                        prior_obs_cand_idx = oi;
                         min_dist_to_goal = obs_dist_to_goal;
                     }
                 }
@@ -590,10 +652,7 @@ namespace DynamicPlanning{
                     continue;
                 }
 
-                point_t obs_goal_position = obstacles[oi].goal_position;
-                point_t obs_curr_position = obstacles[oi].position;
                 point_t obs_future_position = obs_pred_trajs[oi][M-1][n];
-
                 double future_dist_to_obs = ellipsoidalDistance(obs_future_position, search_obs_future_position,
                                                                 obstacles[search_obs_idx].downwash);
                 double safety_distance = obstacles[oi].radius + obstacles[search_obs_idx].radius + cluster_margin;
@@ -602,19 +661,33 @@ namespace DynamicPlanning{
                     search_queue.push(oi);
                     cluster.emplace(oi);
 
-                    double obs_dist_to_goal = (obs_curr_position - obs_goal_position).norm();
+                    double obs_dist_to_goal = distanceToGoalByObsIdx(oi);
                     if (obs_dist_to_goal > param.goal_threshold and obs_dist_to_goal < min_dist_to_goal) {
-                        highest_priority_obs_idx = oi;
+                        prior_obs_cand_idx = oi;
                         min_dist_to_goal = obs_dist_to_goal;
                     }
                 }
             }
         }
 
-        if(agent_dist_to_goal < min_dist_to_goal){
-            highest_priority_obs_idx = -1;
+        // Determine prior agent
+        if(prior_obs_id != -1){
+            double prior_dist_to_goal = distanceToGoalByObsId(prior_obs_id);
+            if(prior_dist_to_goal < min_dist_to_goal){
+                min_dist_to_goal = prior_dist_to_goal;
+            }
+            else if(prior_obs_cand_idx != -1){
+                prior_obs_id = obstacles[prior_obs_cand_idx].id;
+            }
+        }
+        else if(prior_obs_cand_idx != -1){
+            prior_obs_id = obstacles[prior_obs_cand_idx].id;
+        }
+        if(agent_dist_to_goal < min_dist_to_goal and agent_dist_to_goal > param.goal_threshold){
+            prior_obs_id = -1;
         }
 
+//        // Cluster logger
 //        if(not cluster.empty()){
 //            std::string cluster_list = "";
 //            for(const auto& idx : cluster){
@@ -631,134 +704,60 @@ namespace DynamicPlanning{
 //            ROS_INFO_STREAM("Agent" << agent.id << ":" << cluster_list << " highest:" << highest);
 //        }
 
-        // If cluster exist and higher priority is in there, then yield the path
-        if(highest_priority_obs_idx != -1){
-            SFC sfc;
-            if(M > 1){
-                sfc = constraints.getSFC(1); //TODO: SFC is not updated yet, find better approach
-            }
-            else{
-                sfc = constraints.getSFC(0);
-            }
 
-//            //cand1
-//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 1.5;
-//            if(isDeadlock()){
-//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
-//                agent.current_goal_position = agent.current_state.position +
-//                        (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
-//            }
-//            else{
-//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-//
-//                point_t z_axis(0, 0, 1);
-//                agent.current_goal_position = agent_future_position +
-//                        (obs_future_position - agent_future_position).normalized().cross(z_axis) * dist_keep;
-//            }
-
-//            //cand2
-//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
-//            if(isDeadlock()){
-//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
-//                agent.current_goal_position = agent.current_state.position +
-//                                              (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
-//            }
-//            else{
-//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-//
-//                point_t z_axis(0, 0, 1);
-//                agent.current_goal_position = agent_future_position +
-//                                              (obs_future_position - agent_future_position).normalized().cross(z_axis) * dist_keep;
-//            }
-
-//            // cand3
-//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
-//            if(sfc.distanceToInnerPoint(agent_future_position) > 0.1){
-//                point_t z_axis(0, 0, 1);
-//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-//                point_t rotate_vector;
-//                rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
-//
-//                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
-//            }
-//            else{
-//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
-//                agent.current_goal_position = agent.current_state.position +
-//                        (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
-//            }
-
-//            // cand5
-//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
-//            if(sfc.distanceToInnerPoint(agent_future_position) > 0.01){
-//                point_t z_axis(0, 0, 1);
-//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-//                point_t rotate_vector;
-//                rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
-//
-//                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
-//            }
-//            else{
-//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
-//                agent.current_goal_position = agent.current_state.position +
-//                                              (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
-//            }
-
-//            // cand6
-//            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 100;
-//            if(sfc.distanceToInnerPoint(agent_future_position) > 0.2){
-//                point_t z_axis(0, 0, 1);
-//                point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-//                point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-//                point_t rotate_vector;
-//                rotate_vector = (obs_future_position - agent_future_position).normalized().cross(z_axis);
-//
-//                agent.current_goal_position = agent_future_position + rotate_vector.normalized() * dist_keep;
-//            }
-//            else{
-//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
-//                agent.current_goal_position = agent.current_state.position +
-//                                              (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
-//            }
-
-            // cand7
-            double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 2.0;
+        // If cluster exist and higher priority agent is in there, then yield the path
+        if(prior_obs_id != -1){
+            int prior_obs_idx = findObstacleIdxByObsId(prior_obs_id);
+            double dist_keep = (obstacles[prior_obs_idx].radius + agent.radius) * 2.0;
             point_t z_axis(0, 0, 1);
-            point_t obs_future_position = obs_pred_trajs[highest_priority_obs_idx][M-1][n];
-            point_t obs_current_position = obstacles[highest_priority_obs_idx].position;
-            point_t right_hand_direction = (obs_future_position - agent_future_position).cross(z_axis).normalized();
-            double right_hand_margin = sfc.raycastFromInnerPoint(agent_future_position, right_hand_direction);
-            if(right_hand_margin > 0.1){
-                agent.current_goal_position = agent_future_position + right_hand_direction.normalized() * std::min(right_hand_margin, dist_keep);
+            point_t right_hand_direction = (obstacles[prior_obs_idx].position - agent.current_state.position).cross(z_axis).normalized();
+
+            // Check right hand rule can be used.
+            double right_hand_margin;
+            if(param.world_use_octomap){
+                SFC sfc;
+                if(M > 1){
+                    sfc = constraints.getSFC(1); //TODO: SFC is not updated yet, find better approach
+                }
+                else{
+                    sfc = constraints.getSFC(0);
+                }
+                right_hand_margin = sfc.raycastFromInnerPoint(agent.current_state.position, right_hand_direction);
             }
             else{
-                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
+                right_hand_margin = SP_INFINITY;
+            }
+
+            for(int oi = 0; oi < N_obs; oi++){
+                ClosestPoints closest_points = closestPointsBetweenPointAndRay(obstacles[oi].position,
+                                                                               agent.current_state.position,
+                                                                               right_hand_direction);
+                double margin = closest_points.closest_point2.distance(agent.current_state.position);
+                if(margin < right_hand_margin){
+                    right_hand_margin = margin;
+                }
+            }
+
+            if(right_hand_margin > 0.1){
+                agent.current_goal_position = agent.current_state.position + right_hand_direction.normalized() * std::min(right_hand_margin, dist_keep);
+            }
+            else{
+                point_t obs_curr_position = obstacles[prior_obs_idx].position; //TODO: 여기가 문제인가? closest higher priority?
                 agent.current_goal_position = agent.current_state.position +
                         (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
             }
-
-            //candR
-//            if(isDeadlock()){
-//                double dist_keep = (obstacles[highest_priority_obs_idx].radius + agent.radius) * 1.5;
-//                point_t obs_curr_position = obstacles[highest_priority_obs_idx].position;
-//                agent.current_goal_position = agent.current_state.position -
-//                        (obs_curr_position - agent.current_state.position).normalized() * dist_keep;
-//            }
-//            else{
-//                point_t z_axis(0, 0, 1);
-//                agent.current_goal_position = agent.current_state.position +
-//                        (agent.desired_goal_position - agent.current_state.position).cross(z_axis);
-//            }
-
-            return;
         }
+        else{
+            agent.current_goal_position = los_free_goal;
+        }
+    }
 
+    void TrajPlanner::goalPlanningWithPriority3() {
         // Find higher_priority_agents
         std::set<int> higher_priority_agents; // set of obstacle id
-//        higher_priority_agents.emplace(obstacles[highest_priority_obs_idx].id);
+        int closest_obs_idx = -1;
+        double agent_dist_to_goal = agent.current_state.position.distance(agent.desired_goal_position);
+        double min_dist_to_obs = SP_INFINITY;
         for(int oi = 0; oi < N_obs; oi++) {
             if (obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE or
                 obs_slack_indices.find(oi) != obs_slack_indices.end()) {
@@ -769,25 +768,38 @@ namespace DynamicPlanning{
                 point_t obs_curr_position = obstacles[oi].position;
                 point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
 
-                //cand4 = cand3
-                if(obs_curr_position.distance(agent.current_state.position) > 3.0){
-                    continue;
-                }
-
-                double obs_dist_to_goal = obs_curr_position.distance(obs_goal_position);
-                double dist_to_obs = obs_curr_position.distance(agent.current_state.position);
-
                 // Impose the higher priority to the agents with smaller dist_to_goal
                 // Do not consider the agents that have the same direction.
                 // Do not consider the agent that is near goal.
+                double obs_dist_to_goal = obs_curr_position.distance(obs_goal_position);
+                bool obs_diff_direction = (obs_future_position - obs_curr_position).dot(obs_curr_position - agent.current_state.position) < 0;
+                bool obs_stopped = obstacles[oi].velocity.norm() < param.deadlock_velocity_threshold;
                 if (obs_dist_to_goal > param.goal_threshold and
-                    (obs_future_position - obs_curr_position).dot(obs_curr_position - agent.current_state.position) < 0 and
-                    obs_dist_to_goal < agent_dist_to_goal) {
+                    (obs_diff_direction or obs_stopped) and
+                    (agent_dist_to_goal < param.goal_threshold or obs_dist_to_goal < agent_dist_to_goal)) {
                     higher_priority_agents.emplace(obstacles[oi].id);
+
+                    double dist_to_obs = obs_curr_position.distance(agent.current_state.position);
+                    if(dist_to_obs < min_dist_to_obs){
+                        min_dist_to_obs = dist_to_obs;
+                        closest_obs_idx = oi;
+                    }
                 }
             }
         }
 
+        if(isDeadlock()){
+//        if(min_dist_to_obs < param.priority_dist_threshold){
+//            double dist_keep = (obstacles[closest_obs_idx].radius + agent.radius) * 2.0;
+            double dist_keep = param.priority_dist_threshold + 0.1;
+            vector_t obs_to_agent_direction = agent.current_state.position - obstacles[closest_obs_idx].position;
+            vector_t back_direction = obs_to_agent_direction.normalized();
+            vector_t surface_direction;
+
+            agent.current_goal_position = findProperGoalByDirection(agent.current_state.position, back_direction,
+                                                                    dist_keep);
+            return;
+        }
 
         // A* considering priority
         GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
@@ -803,10 +815,31 @@ namespace DynamicPlanning{
         }
 
         // Find los-free goal from end of the initial trajectory
-        grid_los_goal = grid_based_planner.findLOSFreeGoal(agent_future_position, agent.desired_goal_position,
-                                                           agent.radius);
+        point_t los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
+                                                                   agent.desired_goal_position,
+                                                                   agent.radius);
 
-        agent.current_goal_position = grid_los_goal;
+        for(int oi = 0; oi < N_obs; oi++){
+            point_t obs_future_position = obs_pred_trajs[oi][M-1][n];
+            point_t agent_future_position = initial_traj[M-1][n];
+            double margin = 0.01;
+            double safety_distance = agent.radius + obstacles[oi].radius;
+            if(obs_future_position.distance(agent_future_position) < safety_distance + margin){
+                vector_t z_axis(0, 0, 1);
+                vector_t right_hand_direction = (los_free_goal - agent.current_state.position).cross(z_axis).normalized();
+                double dist_keep = std::max(safety_distance * 3.0, (los_free_goal - agent.current_state.position).norm());
+//                agent.current_goal_position = findProperGoalByDirection(agent.current_state.position, right_hand_direction, dist_keep);
+                agent.current_goal_position = agent.current_state.position + right_hand_direction * dist_keep;
+
+//                agent.current_goal_position = agent.current_state.position +
+//                                              (agent.desired_goal_position - agent.current_state.position).cross(z_axis);
+
+                return;
+            }
+        }
+
+
+        agent.current_goal_position = los_free_goal;
     }
 
     void TrajPlanner::obstaclePrediction(){
@@ -1606,8 +1639,8 @@ namespace DynamicPlanning{
             flag_initialize_sfc = false;
         }
         else{
-            constraints.generateFeasibleSFC(initial_traj[M-1][n], agent.current_goal_position, grid_path,
-                                            agent.radius);
+            constraints.generateFeasibleSFC(initial_traj[M-1][n], agent.current_goal_position,
+                                            grid_path, agent.radius);
         }
     }
 
@@ -1712,11 +1745,11 @@ namespace DynamicPlanning{
         marker.type = visualization_msgs::Marker::SPHERE;
         marker.action = visualization_msgs::Marker::ADD;
         marker.color = mission.color[agent.id];
-        marker.color.a = 0.5;
+        marker.color.a = 0.2;
 
-        marker.scale.x = 0.1;
-        marker.scale.y = 0.1;
-        marker.scale.z = 0.1;
+        marker.scale.x = 0.05;
+        marker.scale.y = 0.05;
+        marker.scale.z = 0.05;
 
         int marker_id = 0;
         for(const auto& point : grid_path) {
@@ -1800,7 +1833,7 @@ namespace DynamicPlanning{
                dist_to_goal > param.goal_threshold;
     }
 
-    int TrajPlanner::findObstacleIdxById(int obs_id) const{
+    int TrajPlanner::findObstacleIdxByObsId(int obs_id) const{
         int oi = -1;
         for(int i = 0; i < N_obs; i++){
             if(obstacles[i].id == obs_id){
@@ -1808,6 +1841,15 @@ namespace DynamicPlanning{
             }
         }
         return oi;
+    }
+
+    double TrajPlanner::distanceToGoalByObsId(int obs_id) const{
+        int obs_idx = findObstacleIdxByObsId(obs_id);
+        return distanceToGoalByObsIdx(obs_idx);
+    }
+
+    double TrajPlanner::distanceToGoalByObsIdx(int obs_idx) const{
+        return obstacles[obs_idx].goal_position.distance(obstacles[obs_idx].position);
     }
 
     double TrajPlanner::computeCollisionTimeToDistmap(const point_t& start_position,
@@ -1904,8 +1946,8 @@ namespace DynamicPlanning{
     }
 
     point_t TrajPlanner::normalVector(const point_t& obs_start, const point_t& obs_goal,
-                                               const point_t& agent_start, const point_t& agent_goal,
-                                               double& closest_dist) {
+                                      const point_t& agent_start, const point_t& agent_goal,
+                                      double& closest_dist) {
         ClosestPoints closest_points;
         closest_points = closestPointsBetweenLinePaths(obs_start, obs_goal, agent_start, agent_goal);
         closest_dist = closest_points.dist;
@@ -1929,7 +1971,7 @@ namespace DynamicPlanning{
     }
 
     point_t TrajPlanner::normalVectorBetweenPolys(const points_t &control_points_agent,
-                                                           const points_t &control_points_obs) {
+                                                  const points_t &control_points_obs) {
         size_t n_control_points = control_points_agent.size();
         points_t control_points_rel;
         control_points_rel.resize(n_control_points);
@@ -1941,5 +1983,29 @@ namespace DynamicPlanning{
                                                                               control_points_rel);
         point_t normal_vector = closest_points.closest_point2.normalized();
         return normal_vector;
+    }
+
+    point_t TrajPlanner::findProperGoalByDirection(const point_t& start, const vector_t& direction, double dist_keep){
+        point_t goal;
+        vector_t surface_direction;
+        double margin;
+
+        if(param.world_use_octomap and planner_seq > 1){
+            SFC sfc = constraints.findProperSFC(start, start + direction * dist_keep);
+            margin = sfc.raycastFromInnerPoint(agent.current_state.position, direction, surface_direction);
+        }
+        else{
+            margin = SP_INFINITY;
+        }
+
+        if(margin > dist_keep){
+            goal = agent.current_state.position + direction * dist_keep;
+        }
+        else{
+            point_t wall_direction = (direction - surface_direction * surface_direction.dot(direction)).normalized();
+            goal = agent.current_state.position + direction * margin + wall_direction * (dist_keep - margin);
+        }
+
+        return goal;
     }
 }

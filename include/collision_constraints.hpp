@@ -56,6 +56,8 @@ namespace DynamicPlanning {
         [[nodiscard]] double distanceToPoint(const point_t& point) const;
         [[nodiscard]] double distanceToInnerPoint(const point_t& point) const;
         [[nodiscard]] double raycastFromInnerPoint(const point_t& point, const point_t& direction) const;
+        [[nodiscard]] double raycastFromInnerPoint(const point_t& point, const point_t& direction,
+                                                   point_t& surface_direction) const;
 
         [[nodiscard]] points_t getVertices() const;
         [[nodiscard]] lines_t getEdges() const;
@@ -76,6 +78,8 @@ namespace DynamicPlanning {
 
         void generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
                                  const points_t& grid_path, double agent_radius);
+
+        SFC findProperSFC(const point_t& start_point, const point_t& goal_point);
 
         // Getter
         [[nodiscard]] LSC getLSC(int oi, int m, int i) const;
@@ -127,6 +131,7 @@ namespace DynamicPlanning {
         [[nodiscard]] visualization_msgs::MarkerArray convertSFCsToMarkerArrayMsg(const std_msgs::ColorRGBA& color,
                                                                                   double agent_radius) const;
 
+        void updateSFCLibrary(const points_t& grid_path, double agent_radius);
         SFC expandSFCFromPoint(const point_t& point, double agent_radius);
         SFC expandSFCFromLine(const Line& line, double agent_radius);
         [[nodiscard]] std::vector<double> initializeBoxFromPoints(const points_t& points) const;

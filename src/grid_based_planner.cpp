@@ -105,7 +105,6 @@ namespace DynamicPlanning {
 
         // Update distmap to gridmap
         if(distmap_ptr != nullptr) {
-
             for (int i = 0; i < grid_info.dim[0]; i++) {
                 for (int j = 0; j < grid_info.dim[1]; j++) {
                     for (int k = 0; k < grid_info.dim[2]; k++) {
@@ -326,11 +325,12 @@ namespace DynamicPlanning {
                                               double agent_radius) {
         point_t los_free_goal = current_position;
 
-        points_t path = plan_result.path;
-        path.emplace_back(goal_position);
-
         if (distmap_ptr != nullptr) {
+            points_t path = plan_result.path;
+            path.emplace_back(goal_position);
+
             for (const auto &point : path) {
+//                bool is_safe = castRay(current_position, point, agent_radius + 0.5 * param.world_resolution); // add 0.5 * param.grid_resolution to avoid numerical error.
                 bool is_safe = castRay(current_position, point, agent_radius);
 
                 if (is_safe) {
@@ -340,10 +340,13 @@ namespace DynamicPlanning {
                     break;
                 }
             }
-        }
 
-        if(los_free_goal.distance(current_position) < SP_EPSILON_FLOAT and path.size() > 2){
-            los_free_goal = path[1];
+            if(los_free_goal.distance(current_position) < SP_EPSILON_FLOAT and path.size() > 2){
+                los_free_goal = path[1];
+            }
+        }
+        else{
+            los_free_goal = goal_position;
         }
 
         return los_free_goal;

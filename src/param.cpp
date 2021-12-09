@@ -59,6 +59,9 @@ namespace DynamicPlanning {
         else if(goal_mode_str == "prior_based2"){
             goal_mode = GoalMode::PRIORBASED2;
         }
+        else if(goal_mode_str == "prior_based3"){
+            goal_mode = GoalMode::PRIORBASED3;
+        }
 
         // Obstacle prediction
         nh.param<bool>("obs/size_prediction", obs_size_prediction, true);
@@ -166,7 +169,7 @@ namespace DynamicPlanning {
     }
 
     std::string Param::getGoalModeStr() const{
-        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based", "prior_based2"};
+        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based", "prior_based2", "prior_based3"};
         return planner_mode_strs[static_cast<int>(goal_mode)];
     }
 }

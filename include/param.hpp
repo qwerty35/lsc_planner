@@ -86,10 +86,10 @@ namespace DynamicPlanning{
         double priority_dist_threshold;
 
         bool initialize(const ros::NodeHandle &nh);
-        std::string getPlannerModeStr() const;
-        std::string getPredictionModeStr() const;
-        std::string getInitialTrajModeStr() const;
-        std::string getSlackModeStr() const;
-        std::string getGoalModeStr() const;
+        [[nodiscard]] std::string getPlannerModeStr() const;
+        [[nodiscard]] std::string getPredictionModeStr() const;
+        [[nodiscard]] std::string getInitialTrajModeStr() const;
+        [[nodiscard]] std::string getSlackModeStr() const;
+        [[nodiscard]] std::string getGoalModeStr() const;
     };
 }

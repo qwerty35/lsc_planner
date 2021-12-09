@@ -148,7 +148,7 @@ namespace DynamicPlanning{
 
     double SFC::distanceToPoint(const point_t& point) const{
         if(isPointInSFC(point)){
-            return 0;
+            return -1;
         }
 
         point_t closest_point = point;
@@ -166,7 +166,7 @@ namespace DynamicPlanning{
 
     double SFC::distanceToInnerPoint(const point_t& point) const{
         if(not isPointInSFC(point)){
-            return 0;
+            return -1;
         }
 
         double dist, min_dist = SP_INFINITY;
@@ -186,12 +186,16 @@ namespace DynamicPlanning{
     }
 
     double SFC::raycastFromInnerPoint(const point_t& inner_point, const point_t& direction) const{
+        point_t surface_direction;
+        return raycastFromInnerPoint(inner_point, direction, surface_direction);
+    }
+
+    double SFC::raycastFromInnerPoint(const point_t& inner_point, const point_t& direction, point_t& surface_direction) const{
         if(not isPointInSFC(inner_point)){
-            return 0;
+            return -1;
         }
 
         double a, b, k, min_dist = SP_INFINITY;
-
         for(int i = 0; i < 3; i++){
             point_t n_surface;
             n_surface(i) = 1;
@@ -204,6 +208,7 @@ namespace DynamicPlanning{
             k = a / b;
             if(k > 0 and k < min_dist){
                 min_dist = k;
+                surface_direction = n_surface;
             }
         }
 
@@ -217,8 +222,9 @@ namespace DynamicPlanning{
             }
 
             k = a / b;
-            if(k > 0 and k < min_dist){
+            if(k >= 0 and k < min_dist){
                 min_dist = k;
+                surface_direction = n_surface;
             }
         }
 
@@ -305,8 +311,7 @@ namespace DynamicPlanning{
         }
     }
 
-    void CollisionConstraints::generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
-                                                   const points_t& grid_path, double agent_radius){
+    void CollisionConstraints::updateSFCLibrary(const points_t& grid_path, double agent_radius){
         // Update sfc library using discrete path
         if(not grid_path.empty()) {
             for (int i = 0; i < grid_path.size() - 1; i++) {
@@ -324,6 +329,12 @@ namespace DynamicPlanning{
                 }
             }
         }
+    }
+
+    void CollisionConstraints::generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
+                                                   const points_t& grid_path, double agent_radius){
+        // update sfc library
+        updateSFCLibrary(grid_path, agent_radius);
 
         // Update sfc for segments m < M-1 from previous sfc
         for(int m = 0; m < M - 1; m++){
@@ -350,16 +361,57 @@ namespace DynamicPlanning{
         }
 
         if(min_dist_to_goal == SP_INFINITY){
-            ROS_WARN("min_dist_to_goal = SP_INF!!!!");
+            ROS_WARN("[CollisionConstraints] Cannot find proper SFC in sfc_library, try naive method0");
             try{
                 sfc_update = expandSFCFromPoint(last_point, agent_radius);
             }
             catch(...){ //TODO: define error
+                ROS_WARN("[CollisionConstraints] Cannot find proper SFC, use previous one");
                 sfc_update = sfcs[M - 1]; // Reuse previous one
             }
         }
 
         sfcs[M - 1] = sfc_update;
+    }
+
+    SFC CollisionConstraints::findProperSFC(const point_t& start_point, const point_t& goal_point){
+        SFC proper_sfc, sfc_cand;
+        bool find_proper_sfc = false;
+        double min_dist = SP_INFINITY;
+
+        for(const auto& sfc : sfc_library){
+            if(not sfc.isPointInSFC(start_point)){
+                continue;
+            }
+
+            if(sfc.isPointInSFC(goal_point)){
+                proper_sfc = sfc;
+                find_proper_sfc = true;
+                break;
+            }
+            else{
+                double dist = sfc.distanceToPoint(goal_point);
+                if(dist < min_dist){
+                    sfc_cand = sfc;
+                    min_dist = dist;
+                }
+            }
+        }
+
+        if(not find_proper_sfc){
+            if(min_dist == SP_INFINITY){ // if sfc_cand not found
+                if(M > 1){
+                    proper_sfc = getSFC(1); // SFC will be updated to this one.
+                }
+                else{
+                    proper_sfc = getSFC(0);
+                }
+            }
+
+            proper_sfc = sfc_cand;
+        }
+
+        return proper_sfc;
     }
 
     LSC CollisionConstraints::getLSC(int oi, int m, int i) const{

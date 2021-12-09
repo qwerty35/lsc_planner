@@ -23,6 +23,8 @@ namespace DynamicPlanning{
         return nChoosek(n, i) * pow(t_normalized, i) * pow(1-t_normalized, n - i);
     }
 
+    //TODO: MINVO basis
+
     static point_t getPointFromControlPoints(points_t control_points,
                                              double t_normalized){
         point_t point;

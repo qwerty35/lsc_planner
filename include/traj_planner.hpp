@@ -117,6 +117,7 @@ namespace DynamicPlanning {
         FlagMsg flag_current_state, flag_obstacles;
         bool flag_initialize_sfc;
         PlannerState planner_state;
+        int prior_obs_id;
 
         // Agent
         Agent agent;
@@ -159,7 +160,6 @@ namespace DynamicPlanning {
 
         // Grid based planner
         points_t grid_path;
-        point_t grid_los_goal;
 
         // ROS
         void initializeROS();
@@ -180,6 +180,7 @@ namespace DynamicPlanning {
         void goalPlanningWithRightHandRule();
         void goalPlanningWithPriority();
         void goalPlanningWithPriority2();
+        void goalPlanningWithPriority3();
 
         // Obstacle prediction
         void obstaclePrediction();
@@ -233,7 +234,9 @@ namespace DynamicPlanning {
         void publishObstaclePrediction();
 
         // Utility functions
-        [[nodiscard]] int findObstacleIdxById(int obs_id) const;
+        [[nodiscard]] int findObstacleIdxByObsId(int obs_id) const;
+        [[nodiscard]] double distanceToGoalByObsId(int obs_id) const;
+        [[nodiscard]] double distanceToGoalByObsIdx(int obs_idx) const;
 
         double computeCollisionTimeToDistmap(const point_t& start_position,
                                              const point_t& goal_position,
@@ -241,5 +244,7 @@ namespace DynamicPlanning {
                                              double time_horizon);
 
         double computeMinCollisionTime();
+
+        point_t findProperGoalByDirection(const point_t& start, const vector_t& direction, double dist_keep);
     };
 }

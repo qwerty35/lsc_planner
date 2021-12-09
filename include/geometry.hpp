@@ -53,7 +53,7 @@ namespace DynamicPlanning{
         return closest_points;
     }
 
-//closest_point: closest point in line
+    //closest_point: closest point in line
     static ClosestPoints closestPointsBetweenPointAndLineSegment(const point_t& point,
                                                                  const point_t& line_start,
                                                                  const point_t& line_goal){
@@ -87,7 +87,7 @@ namespace DynamicPlanning{
         ClosestPoints closest_points;
         closest_points.dist = dist_min;
         closest_points.closest_point1 = point;
-        closest_points.closest_point2 = rel_closest_point + point;;
+        closest_points.closest_point2 = rel_closest_point + point;
 
         return closest_points;
     }
