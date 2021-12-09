@@ -104,6 +104,13 @@ namespace DynamicPlanning {
         nh.param<double>("plan/goal_radius", goal_radius, 100.0);
         nh.param<double>("plan/priority_dist_threshold", priority_dist_threshold, 0.4);
 
+        // Communication
+        nh.param<double>("communication/range", communication_range, 3.0);
+
+        // Exploration
+        nh.param<double>("sensor/range", sensor_range, 3.0);
+
+
         package_path = ros::package::getPath("lsc_planner");
 
         if(mission_file_name.find(".json") != std::string::npos){

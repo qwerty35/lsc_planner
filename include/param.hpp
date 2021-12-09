@@ -85,6 +85,13 @@ namespace DynamicPlanning{
         double goal_radius;
         double priority_dist_threshold;
 
+        // Communication
+        double communication_range;
+
+        // Exploration
+        double sensor_range;
+
+
         bool initialize(const ros::NodeHandle &nh);
         [[nodiscard]] std::string getPlannerModeStr() const;
         [[nodiscard]] std::string getPredictionModeStr() const;

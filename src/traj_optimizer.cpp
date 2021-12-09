@@ -50,11 +50,7 @@ namespace DynamicPlanning {
 
         // Set CPLEX algorithm
 //        cplex.setParam(IloCplex::Param::TimeLimit, 0.02);
-//        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::AutoAlg); //0.015211
-//        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Primal); //0.0111339
-        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual); //0.0101956
-//        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Barrier); //0.0135995
-//        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Network); //0.0121052
+//        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual); //0.0101956
 
         // Initialize QP model
         populatebyrow(model, var, con, agent, constraints);
@@ -96,7 +92,7 @@ namespace DynamicPlanning {
             env.end();
         }
         catch (IloException &e) {
-            if(not param.log){
+            if(param.log){
                 cplex.exportModel(QPmodel_path.c_str());
             }
 
@@ -435,22 +431,22 @@ namespace DynamicPlanning {
                         continue; // Do not adjust constraint at initial state
                     }
 
-                    LSC rsfc = constraints.getLSC(oi, m, i);
+                    LSC lsc = constraints.getLSC(oi, m, i);
                     IloNumExpr expr(env);
-                    expr += rsfc.normal_vector.x() *
-                            (x[0 * offset_dim + m * offset_seg + i] - rsfc.obs_control_point.x());
-                    expr += rsfc.normal_vector.y() *
-                            (x[1 * offset_dim + m * offset_seg + i] - rsfc.obs_control_point.y());
+                    expr += lsc.normal_vector.x() *
+                            (x[0 * offset_dim + m * offset_seg + i] - lsc.obs_control_point.x());
+                    expr += lsc.normal_vector.y() *
+                            (x[1 * offset_dim + m * offset_seg + i] - lsc.obs_control_point.y());
                     if (dim == 3) {
-                        expr += rsfc.normal_vector.z() *
-                                (x[2 * offset_dim + m * offset_seg + i] - rsfc.obs_control_point.z());
+                        expr += lsc.normal_vector.z() *
+                                (x[2 * offset_dim + m * offset_seg + i] - lsc.obs_control_point.z());
                     }
 
                     if (param.slack_mode == SlackMode::COLLISIONCONSTRAINT or
                         obs_slack_indices.find(oi) != obs_slack_indices.end()) {
-                        expr += -(rsfc.d + x[offset_slack + M * oi + m]);
+                        expr += -(lsc.d + x[offset_slack + M * oi + m]);
                     } else {
-                        expr += -rsfc.d;
+                        expr += -lsc.d;
                     }
 
                     c.add(expr >= 0);
@@ -525,6 +521,21 @@ namespace DynamicPlanning {
                 int m = M - 1;
                 for(int i = 1; i < phi; i++){
                     c.add(x[k * offset_dim + m * offset_seg + n] - x[k * offset_dim + m * offset_seg + n - i] == 0);
+                }
+            }
+        }
+
+        // communication bound
+        if(param.communication_range > 0){
+            double bound_sq = 0.25 * param.communication_range * param.communication_range;
+            for(int m = 0; m < M; m++){
+                for(int i = 0; i < n + 1; i++){
+                    IloNumExpr expr(env);
+                    for(int k = 0; k < dim; k++){
+                        expr += ((x[k * offset_dim + m * offset_seg + i] - agent.current_state.position(k)))
+                                * ((x[k * offset_dim + m * offset_seg + i] - agent.current_state.position(k)));
+                    }
+                    c.add(expr <= bound_sq);
                 }
             }
         }

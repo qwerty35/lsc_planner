@@ -22,6 +22,7 @@ namespace DynamicPlanning{
         pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
         pub_desired_trajs_vis = nh.advertise<visualization_msgs::MarkerArray>("/desired_trajs_vis", 1);
         pub_grid_map = nh.advertise<visualization_msgs::MarkerArray>("/grid_map", 1);
+        pub_communication_range = nh.advertise<visualization_msgs::MarkerArray>("/communication_range", 1);
 //        sub_octomap = nh.subscribe( "/octomap_full", 1, &MultiSyncSimulator::octomapCallback, this);
         service_start_planning = nh.advertiseService("/start_planning", &MultiSyncSimulator::startPlanningCallback, this);
         service_start_patrol = nh.advertiseService("/start_patrol", &MultiSyncSimulator::startPatrolCallback, this);
@@ -269,6 +270,11 @@ namespace DynamicPlanning{
                     continue;
                 }
 
+                // communication range
+                if(agents[qi]->getCurrentPosition().distance(agents[qj]->getCurrentPosition()) > param.communication_range){
+                    continue;
+                }
+
                 dynamic_msgs::Obstacle obstacle;
                 obstacle.id = qj;
                 obstacle.type = ObstacleType::AGENT;
@@ -346,8 +352,8 @@ namespace DynamicPlanning{
         obstacle_generator.publish();
         publishAgentState();
         publishDesiredTrajs();
-
 //        publishGridMap();
+        publishCommunicationRange();
     }
 
     bool MultiSyncSimulator::isFinished(){
@@ -1000,5 +1006,51 @@ namespace DynamicPlanning{
             msg_grid_map.markers.emplace_back(marker);
         }
         pub_grid_map.publish(msg_grid_map);
+    }
+
+    void MultiSyncSimulator::publishCommunicationRange(){
+        visualization_msgs::MarkerArray msg_communication_range;
+        msg_communication_range.markers.clear();
+
+        visualization_msgs::Marker marker;
+        marker.header.frame_id = param.world_frame_id;
+        marker.type = visualization_msgs::Marker::SPHERE;
+        marker.action = visualization_msgs::Marker::ADD;
+        marker.ns = "communication_range";
+
+        for(int qi = 0; qi < mission.qn; qi++) {
+            marker.color = mission.color[qi];
+            marker.color.a = 0.1;
+
+            marker.scale.x = 2 * param.communication_range;
+            marker.scale.y = 2 * param.communication_range;
+            marker.scale.z = 2 * param.communication_range;
+
+            marker.id = qi;
+            dynamic_msgs::State current_state = agents[qi]->getCurrentStateMsg();
+            marker.pose.position = current_state.pose.position;
+            marker.pose.orientation = defaultQuaternion();
+
+            msg_communication_range.markers.emplace_back(marker);
+        }
+
+        marker.ns = "trajectory_bound";
+        for(int qi = 0; qi < mission.qn; qi++) {
+            marker.color = mission.color[qi];
+            marker.color.a = 0.1;
+
+            marker.scale.x = param.communication_range;
+            marker.scale.y = param.communication_range;
+            marker.scale.z = param.communication_range;
+
+            marker.id = qi;
+            dynamic_msgs::State current_state = agents[qi]->getCurrentStateMsg();
+            marker.pose.position = current_state.pose.position;
+            marker.pose.orientation = defaultQuaternion();
+
+            msg_communication_range.markers.emplace_back(marker);
+        }
+
+        pub_communication_range.publish(msg_communication_range);
     }
 }

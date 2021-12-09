@@ -37,7 +37,6 @@ namespace DynamicPlanning{
         planner_state = PlannerState::WAIT;
         planner_seq = 0;
         planning_report = PlanningReport::Initialized;
-        N_obs = 0;
         traj_cost = 0;
 
         // Initialize trajectory optimization module
@@ -82,7 +81,7 @@ namespace DynamicPlanning{
 
         // Initialize constraints
         if(planner_seq == 0){
-            constraints.initialize(distmap_ptr, N_obs, obs_slack_indices, param, mission);
+            constraints.initialize(distmap_ptr, obs_slack_indices, param, mission);
         }
 
         // Update clock
@@ -148,10 +147,10 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::setObstacles(const dynamic_msgs::ObstacleArray& msg_obstacles){
-        N_obs = msg_obstacles.obstacles.size();
         obstacles.clear();
-        obstacles.resize(N_obs);
 
+        size_t N_obs = msg_obstacles.obstacles.size();
+        obstacles.resize(N_obs);
         for (int oi = 0; oi < N_obs; oi++) {
             obstacles[oi].start_time = msg_obstacles.start_time;
             if(obstacles[oi].update_time < msg_obstacles.header.stamp){
@@ -489,7 +488,7 @@ namespace DynamicPlanning{
         int closest_obs_id = -1;
         double dist_to_goal = (agent.current_state.position - agent.desired_goal_position).norm();
         double min_dist_to_obs = SP_INFINITY;
-        for(int oi = 0; oi < N_obs; oi++){
+        for(int oi = 0; oi < obstacles.size(); oi++){
             if(obs_slack_indices.find(oi) != obs_slack_indices.end()){
                 high_priority_obstacle_ids.emplace(obstacles[oi].id);
                 continue;
@@ -554,7 +553,7 @@ namespace DynamicPlanning{
         // Find higher_priority_agents
         std::set<int> higher_priority_agents; // set of obstacle id
         double agent_dist_to_goal = agent.current_state.position.distance(agent.desired_goal_position);
-        for(int oi = 0; oi < N_obs; oi++) {
+        for(int oi = 0; oi < obstacles.size(); oi++) {
             if (obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE or
                 obs_slack_indices.find(oi) != obs_slack_indices.end()) {
                 higher_priority_agents.emplace(obstacles[oi].id);
@@ -619,7 +618,7 @@ namespace DynamicPlanning{
         int prior_obs_cand_idx = -1;
         double min_dist_to_goal = SP_INFINITY;
         double cluster_margin = 0.1;
-        for(int oi = 0; oi < N_obs; oi++) {
+        for(int oi = 0; oi < obstacles.size(); oi++) {
             if (obstacles[oi].type == ObstacleType::AGENT) {
                 point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
                 double future_dist_to_obs = ellipsoidalDistance(obs_future_position, agent_future_position,
@@ -647,7 +646,7 @@ namespace DynamicPlanning{
             point_t search_obs_future_position = obs_pred_trajs[search_obs_idx][M - 1][n];
             search_queue.pop();
 
-            for(int oi = 0; oi < N_obs; oi++){
+            for(int oi = 0; oi < obstacles.size(); oi++){
                 if(oi == search_obs_idx or cluster.find(oi) != cluster.end()){
                     continue;
                 }
@@ -728,7 +727,7 @@ namespace DynamicPlanning{
                 right_hand_margin = SP_INFINITY;
             }
 
-            for(int oi = 0; oi < N_obs; oi++){
+            for(int oi = 0; oi < obstacles.size(); oi++){
                 ClosestPoints closest_points = closestPointsBetweenPointAndRay(obstacles[oi].position,
                                                                                agent.current_state.position,
                                                                                right_hand_direction);
@@ -758,7 +757,7 @@ namespace DynamicPlanning{
         int closest_obs_idx = -1;
         double agent_dist_to_goal = agent.current_state.position.distance(agent.desired_goal_position);
         double min_dist_to_obs = SP_INFINITY;
-        for(int oi = 0; oi < N_obs; oi++) {
+        for(int oi = 0; oi < obstacles.size(); oi++) {
             if (obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE or
                 obs_slack_indices.find(oi) != obs_slack_indices.end()) {
                 higher_priority_agents.emplace(obstacles[oi].id);
@@ -819,7 +818,7 @@ namespace DynamicPlanning{
                                                                    agent.desired_goal_position,
                                                                    agent.radius);
 
-        for(int oi = 0; oi < N_obs; oi++){
+        for(int oi = 0; oi < obstacles.size(); oi++){
             point_t obs_future_position = obs_pred_trajs[oi][M-1][n];
             point_t agent_future_position = initial_traj[M-1][n];
             double margin = 0.01;
@@ -843,6 +842,10 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::obstaclePrediction(){
+        size_t N_obs = obstacles.size();
+        obs_pred_trajs.resize(N_obs);
+        obs_pred_sizes.resize(N_obs);
+
         switch(param.prediction_mode){
             case PredictionMode::POSITION:
                 obstaclePredictionWithCurrPos();
@@ -864,7 +867,6 @@ namespace DynamicPlanning{
                 break;
             default:
                 throw std::invalid_argument("[TrajPlanner] Invalid obstacle prediction mode");
-                break;
         }
 
         obstaclePredictionCheck();
@@ -873,55 +875,26 @@ namespace DynamicPlanning{
 
     // Obstacle prediction using linear Kalman filter
     // It assumes that position (may not correct) is given
+    //TODO: id based linear kalman filter needed
     void TrajPlanner::obstaclePredictionWithLinearKalmanFilter() {
-        if(linear_kalman_filters.size() < N_obs){
-            linear_kalman_filters.resize(N_obs);
-            for(int oi = 0; oi < N_obs; oi++){
-                linear_kalman_filters[oi].initialize(param.filter_sigma_y_sq,
-                                                     param.filter_sigma_v_sq,
-                                                     param.filter_sigma_a_sq);
-            }
-        }
-
-        obs_pred_trajs.resize(N_obs);
-        for (int oi = 0; oi < N_obs; oi++) {
-            obstacles[oi] = linear_kalman_filters[oi].filter(obstacles[oi]);
-            obs_pred_trajs[oi].resize(M);
-            for (int m = 0; m < M; m++) {
-                obs_pred_trajs[oi][m].resize(n + 1);
-                for(int i = 0; i < n + 1; i++){
-                    double m_intp = m + (double)i/n;
-                    obs_pred_trajs[oi][m][i] = obstacles[oi].position + obstacles[oi].velocity * m_intp * param.dt;
-                }
-            }
-        }
-
-//        obs_pred_sizes.resize(N_obs);
-//        int M_uncertainty = static_cast<int>((param.uncertainty_horizon + SP_EPSILON) / param.dt);
-//        for(int oi = 0; oi < N_obs; oi++){
-//            obs_pred_sizes[oi].resize(M);
-//            double max_acc = obstacles[oi].max_acc;
-//            for (int m = 0; m < M_uncertainty; m++) {
-//                obs_pred_sizes[oi][m].resize(n + 1);
-//                Eigen::MatrixXd coef = Eigen::MatrixXd::Zero(1, n+1);
-//                coef(0, 0) = 0.5 * max_acc * pow(m * param.dt, 2);
-//                coef(0, 1) = max_acc * m * pow(param.dt, 2);
-//                coef(0, 2) = 0.5 * max_acc * pow(param.dt, 2);
+//        if(linear_kalman_filters.size() < N_obs){
+//            linear_kalman_filters.resize(N_obs);
+//            for(int oi = 0; oi < N_obs; oi++){
+//                linear_kalman_filters[oi].initialize(param.filter_sigma_y_sq,
+//                                                     param.filter_sigma_v_sq,
+//                                                     param.filter_sigma_a_sq);
+//            }
+//        }
 //
-//                Eigen::MatrixXd control_points = coef * B_inv;
+//        obs_pred_trajs.resize(N_obs);
+//        for (int oi = 0; oi < N_obs; oi++) {
+//            obstacles[oi] = linear_kalman_filters[oi].filter(obstacles[oi]);
+//            obs_pred_trajs[oi].resize(M);
+//            for (int m = 0; m < M; m++) {
+//                obs_pred_trajs[oi][m].resize(n + 1);
 //                for(int i = 0; i < n + 1; i++){
 //                    double m_intp = m + (double)i/n;
-//                    double uncertainty_radius =
-//                            linear_kalman_filters[oi].getUncertaintyRadius(m_intp * param.dt);
-////                        obs_pred_sizes[oi][m][i] = obstacles[oi].size + control_points(0, i);
-//                    obs_pred_sizes[oi][m][i] = obstacles[oi].radius + uncertainty_radius;
-//                }
-//            }
-//            for(int m = M_uncertainty; m < M; m++){
-//                obs_pred_sizes[oi][m].resize(n + 1);
-//                for(int i = 0; i < n + 1; i++){
-////                        obs_pred_sizes[oi][m][i] = obstacles[oi].size + 0.5 * max_acc * pow(M_uncertainty * param.dt, 2);
-//                    obs_pred_sizes[oi][m][i] = obs_pred_sizes[oi][std::max(M_uncertainty - 1, 0)][n];
+//                    obs_pred_trajs[oi][m][i] = obstacles[oi].position + obstacles[oi].velocity * m_intp * param.dt;
 //                }
 //            }
 //        }
@@ -930,7 +903,7 @@ namespace DynamicPlanning{
     // Obstacle prediction with constant velocity assumption
     // It assumes that correct position and velocity are given
     void TrajPlanner::obstaclePredictionWithCurrVel() {
-        obs_pred_trajs.resize(N_obs);
+        size_t N_obs = obstacles.size();
         for (int oi = 0; oi < N_obs; oi++) {
             obs_pred_trajs[oi].resize(M);
             for (int m = 0; m < M; m++) {
@@ -945,8 +918,7 @@ namespace DynamicPlanning{
 
     // Obstacle prediction using perfect prediction
     void TrajPlanner::obstaclePredictionWithOracle(){
-        obs_pred_trajs.resize(N_obs);
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             double t = (sim_current_time - obstacles[oi].start_time).toSec();
             if(obstacles[oi].type != ObstacleType::AGENT and mission.obstacles[oi]->getType() == "chasing"){
                 throw std::invalid_argument("[TrajPlanner] oracle does not support chasing type obstacles");
@@ -979,53 +951,10 @@ namespace DynamicPlanning{
                 }
             }
         }
-
-//        obs_pred_sizes.resize(N_obs);
-//        for(int oi = 0; oi < N_obs; oi++){
-//            obs_pred_sizes[oi].resize(M);
-//
-//            if(obstacles[oi].type == ObstacleType::AGENT and param.obs_size_prediction) {
-//                double max_acc = obstacles[oi].max_acc;
-//                int M_uncertainty = static_cast<int>((param.uncertainty_horizon + SP_EPSILON) / param.dt);
-//                for (int m = 0; m < M_uncertainty; m++) {
-//                    obs_pred_sizes[oi][m].resize(n + 1);
-//                    Eigen::MatrixXd coef = Eigen::MatrixXd::Zero(1, n + 1);
-//                    coef(0, 0) = 0.5 * max_acc * pow(m * param.dt, 2);
-//                    coef(0, 1) = max_acc * m * pow(param.dt, 2);
-//                    coef(0, 2) = 0.5 * max_acc * pow(param.dt, 2);
-//
-//                    Eigen::MatrixXd control_points = coef * B_inv;
-//
-//                    for (int i = 0; i < n + 1; i++) {
-//                        obs_pred_sizes[oi][m][i] = obstacles[oi].radius + control_points(0, i);
-//                    }
-//                }
-//                for (int m = M_uncertainty; m < M; m++) {
-//                    obs_pred_sizes[oi][m].resize(n + 1);
-//                    for (int i = 0; i < n + 1; i++) {
-//                        obs_pred_sizes[oi][m][i] =
-//                                obstacles[oi].radius + 0.5 * max_acc * pow(M_uncertainty * param.dt, 2);
-//                    }
-//                }
-//            } else{
-//                for (int m = 0; m < M; m++) {
-//                    obs_pred_sizes[oi][m].resize(n + 1);
-//                    for(int i = 0; i < n + 1; i++){
-//                        if(param.obs_size_prediction) {
-//                            obs_pred_sizes[oi][m][i] = obstacles[oi].radius;
-//                        }
-//                        else{
-//                            obs_pred_sizes[oi][m][i] = obstacles[oi].radius + 0.1; //TODO: msg delay error compensation
-//                        }
-//                    }
-//                }
-//            }
-//        }
     }
 
     void TrajPlanner::obstaclePredictionWithCurrPos(){
-        obs_pred_trajs.resize(N_obs);
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             obs_pred_trajs[oi].resize(M);
             for (int m = 0; m < M; m++) {
                 obs_pred_trajs[oi][m].resize(n + 1);
@@ -1040,8 +969,7 @@ namespace DynamicPlanning{
         point_t new_velocity;
         updateORCAVelocity(true);
 
-        obs_pred_trajs.resize(N_obs);
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             obs_pred_trajs[oi].resize(M);
             point_t obstacle_position = obstacles[oi].position;
             point_t orca_velocity = getObsORCAVelocity(oi);
@@ -1062,8 +990,7 @@ namespace DynamicPlanning{
             return;
         }
 
-        obs_pred_trajs.resize(N_obs);
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             obs_pred_trajs[oi].resize(M);
             if (obstacles[oi].type != ObstacleType::AGENT) {
                 // if obstacle is not agent, use current velocity to predict trajectory
@@ -1092,7 +1019,7 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::obstaclePredictionCheck(){
-        for(int oi = 0; oi < N_obs; oi++) {
+        for(int oi = 0; oi < obstacles.size(); oi++) {
             point_t obs_position = obstacles[oi].position;
             if ((obs_pred_trajs[oi][0][0] - obs_position).norm() > param.multisim_reset_threshold) {
                 obs_slack_indices.emplace(oi);
@@ -1106,9 +1033,8 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::obstacleSizePredictionWithConstAcc(){
-        obs_pred_sizes.resize(N_obs);
         int M_uncertainty = static_cast<int>((param.obs_uncertainty_horizon + SP_EPSILON) / param.dt);
-        for(int oi = 0; oi < N_obs; oi++){
+        for(int oi = 0; oi < obstacles.size(); oi++){
             obs_pred_sizes[oi].resize(M);
 
             if(not param.obs_size_prediction) {
@@ -1274,7 +1200,7 @@ namespace DynamicPlanning{
 
     void TrajPlanner::initialTrajPlanningCheck(){
         if((initial_traj[0][0] - agent.current_state.position).norm() > param.multisim_reset_threshold){
-            for(int oi = 0; oi < N_obs; oi++){
+            for(int oi = 0; oi < obstacles.size(); oi++){
                 obs_slack_indices.emplace(oi);
             }
 
@@ -1326,6 +1252,7 @@ namespace DynamicPlanning{
         rvo_simulator_2d->setAgentPrefVelocity(0, goalVector);
 
         // set dynamic obstacles
+        size_t N_obs = obstacles.size();
         for(int oi = 0; oi < N_obs; oi++){
             rvo_simulator_2d->addAgent(RVO2D::Vector2(obstacles[oi].position.x(), obstacles[oi].position.y()));
             rvo_simulator_2d->setAgentRadius(oi + 1, obstacles[oi].radius * param.orca_inflation_ratio);
@@ -1363,7 +1290,7 @@ namespace DynamicPlanning{
         // compute new velocity
         rvo_simulator_2d->computeNewVelocity(agentsList);
         orca_velocities.resize(N_obs + 1);
-        for(int i : agentsList){
+        for(size_t i : agentsList){
             RVO2D::Vector2 rvo_orca_velocity = rvo_simulator_2d->getAgentVelocity(i);
             point_t orca_velocity = point_t(rvo_orca_velocity.x(), rvo_orca_velocity.y(), 0);
             orca_velocities[i] = orca_velocity;
@@ -1397,6 +1324,7 @@ namespace DynamicPlanning{
 
 
         // set dynamic obstacles
+        size_t N_obs = obstacles.size();
         for (int oi = 0; oi < N_obs; oi++) {
             rvo_simulator_3d->addAgent(RVO3D::Vector3(obstacles[oi].position.x(),
                                                       obstacles[oi].position.y(),
@@ -1450,8 +1378,10 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::generateCollisionConstraints(){
+
         // LSC (or BVC) construction
         ros::Time lsc_start_time = ros::Time::now();
+        constraints.initializeLSC(obstacles.size());
         if(param.planner_mode == PlannerMode::LSC){
             generateLSC();
         }
@@ -1480,7 +1410,7 @@ namespace DynamicPlanning{
         double closest_dist;
         point_t normal_vector;
 
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             for (int m = 0; m < M; m++) {
                 normal_vector = normalVector(obs_pred_trajs[oi][m][0],
                                              obs_pred_trajs[oi][m][n],
@@ -1535,7 +1465,7 @@ namespace DynamicPlanning{
                 for (int m = 0; m < M; m++) {
                     for (int i = 0; i < n + 1; i++) {
                         initial_traj[m][i] = initial_traj[0][0] + (initial_traj[m][i] - initial_traj[0][0]) * alpha;
-                        for (int oi = 0; oi < N_obs; oi++) {
+                        for (int oi = 0; oi < obstacles.size(); oi++) {
                             obs_pred_trajs[oi][m][i] = obs_pred_trajs[oi][0][0] +
                                                        (obs_pred_trajs[oi][m][i] - obs_pred_trajs[oi][0][0]) * alpha;
                         }
@@ -1545,7 +1475,7 @@ namespace DynamicPlanning{
         }
 
         point_t normal_vector;
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             // Compute downwash between agents
             double downwash;
             if (obstacles[oi].type == ObstacleType::AGENT) {
@@ -1603,7 +1533,7 @@ namespace DynamicPlanning{
     void TrajPlanner::generateBVC(){
         // Since the original BVC does not consider downwash, we conduct coordinate transformation to consider downwash.
         point_t normal_vector;
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             // Compute downwash
             double downwash = (agent.downwash * agent.radius + obstacles[oi].downwash * obstacles[oi].radius) /
                     (agent.radius + obstacles[oi].radius);
@@ -1662,7 +1592,7 @@ namespace DynamicPlanning{
                         ROS_ERROR("[TrajPlanner] SFC constraint is not feasible.");
                     }
                 }
-                for(int oi = 0; oi < N_obs; oi++){
+                for(int oi = 0; oi < obstacles.size(); oi++){
                     for(int i = 0; i < n + 1; i++){
                         LSC lsc = constraints.getLSC(oi, m, i);
                         double margin = (initial_traj[m][i] - lsc.obs_control_point).dot(lsc.normal_vector) - lsc.d;
@@ -1775,7 +1705,7 @@ namespace DynamicPlanning{
         marker.color.r = 0.0;
         marker.color.g = 0.0;
         marker.color.b = 0.0;
-        for (int oi = 0; oi < N_obs; oi++) {
+        for (int oi = 0; oi < obstacles.size(); oi++) {
             for (int m = 0; m <= M; m++) {
                 marker.id = (M+1) * oi + m;
                 marker.ns = std::to_string(m);
@@ -1816,6 +1746,7 @@ namespace DynamicPlanning{
         pub_obs_pred_traj_vis.publish(msg_obs_pred_traj_vis);
 
         // obstacle prediction raw
+        size_t N_obs = obstacles.size();
         dynamic_msgs::TrajectoryArray msg_obs_pred_traj_raw;
         msg_obs_pred_traj_raw.planner_seq = planner_seq;
         msg_obs_pred_traj_raw.trajectories.resize(N_obs);
@@ -1835,7 +1766,7 @@ namespace DynamicPlanning{
 
     int TrajPlanner::findObstacleIdxByObsId(int obs_id) const{
         int oi = -1;
-        for(int i = 0; i < N_obs; i++){
+        for(int i = 0; i < obstacles.size(); i++){
             if(obstacles[i].id == obs_id){
                 oi = i;
             }
@@ -1902,6 +1833,7 @@ namespace DynamicPlanning{
             }
         }
 
+        size_t N_obs = obstacles.size();
         for (int oi = 0; oi < N_obs; oi++) {
             collision_time = computeCollisionTime(obs_pred_trajs[oi][0][0],
                                                   obs_pred_trajs[oi][M - 1][n],

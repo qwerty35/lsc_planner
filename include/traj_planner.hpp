@@ -129,7 +129,7 @@ namespace DynamicPlanning {
         int planner_seq;
 
         // Frequently used constants
-        int M, n, phi, dim, N_obs;
+        int M, n, phi, dim;
         Eigen::MatrixXd B, B_inv;
 
         // Trajectories

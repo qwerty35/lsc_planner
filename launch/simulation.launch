@@ -86,6 +86,14 @@
     <param name="plan/goal_threshold" value="0.2" /> <!-- If distance between the agent and goal point is smaller than this, then the agent judges that the mission is complete -->
     <param name="plan/goal_radius" value="2.0" />
     <param name="plan/priority_dist_threshold" value="0.4" />
+
+    <!-- Communication -->
+    <param name="communication/range" value="3.0" />
+
+    <!-- Exploration -->
+    <param name="sensor/range" value="3.0" />
+
+
   </node>
 
   <node pkg="rviz" type="rviz" name="rviz"

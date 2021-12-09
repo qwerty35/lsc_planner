@@ -71,10 +71,12 @@ namespace DynamicPlanning {
     public:
         CollisionConstraints() = default;
 
-        void initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr, int N_obs, std::set<int> obs_slack_indices,
+        void initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr, std::set<int> obs_slack_indices,
                         const Param& param, const Mission& mission);
 
         void initializeSFC(const point_t& agent_position, double radius);
+
+        void initializeLSC(size_t N_obs);
 
         void generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
                                  const points_t& grid_path, double agent_radius);
@@ -119,7 +121,7 @@ namespace DynamicPlanning {
         RSFCs lscs;
         SFCs sfcs;
         std::set<int> obs_slack_indices;
-        int N_obs = 0, M = 0, n = 0;
+        int M = 0, n = 0;
         double dt = 0;
         SFCs sfc_library;
 

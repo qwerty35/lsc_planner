@@ -277,27 +277,17 @@ namespace DynamicPlanning{
         return edges;
     }
 
-    void CollisionConstraints::initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr_, int N_obs_,
+    void CollisionConstraints::initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr_,
                                           std::set<int> obs_slack_indices_,
                                           const Param& param_, const Mission& mission_){
         distmap_ptr = distmap_ptr_;
         param = param_;
         mission = mission_;
 
-        N_obs = N_obs_;
         M = param.M;
         n = param.n;
         dt = param.dt;
         obs_slack_indices = std::move(obs_slack_indices_);
-
-        //RSFC
-        lscs.resize(N_obs);
-        for(int oi = 0; oi < N_obs; oi++){
-            lscs[oi].resize(M);
-            for(int m = 0; m < M; m++){
-                lscs[oi][m].resize(n + 1);
-            }
-        }
 
         //SFC
         sfcs.resize(M);
@@ -308,6 +298,17 @@ namespace DynamicPlanning{
         SFC sfc = expandSFCFromPoint(agent_position, radius);
         for(int m = 0; m < M; m++){
             sfcs[m] = sfc;
+        }
+    }
+
+    void CollisionConstraints::initializeLSC(size_t N_obs){
+        lscs.clear();
+        lscs.resize(N_obs);
+        for(int oi = 0; oi < N_obs; oi++){
+            lscs[oi].resize(M);
+            for(int m = 0; m < M; m++){
+                lscs[oi][m].resize(n + 1);
+            }
         }
     }
 
@@ -474,6 +475,7 @@ namespace DynamicPlanning{
             return msg_marker_array;
         }
 
+        size_t N_obs = obstacles.size();
         msg_marker_array.markers.clear();
         for (int oi = 0; oi < N_obs; oi++) {
             std_msgs::ColorRGBA marker_color;
@@ -536,6 +538,7 @@ namespace DynamicPlanning{
         constraint_param.dt = dt;
 
         if(not lscs.empty()){
+            size_t N_obs = obstacles.size();
             msg_collision_constraint.rsfcs.resize(N_obs);
             for (int oi = 0; oi < N_obs; oi++) {
                 constraint_param.id = obstacles[oi].id;

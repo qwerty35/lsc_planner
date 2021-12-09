@@ -46,6 +46,7 @@ namespace DynamicPlanning {
         ros::Publisher pub_desired_trajs_raw;
         ros::Publisher pub_desired_trajs_vis;
         ros::Publisher pub_grid_map;
+        ros::Publisher pub_communication_range;
         ros::Subscriber sub_octomap;
         ros::ServiceServer service_start_planning;
         ros::ServiceServer service_start_patrol;
@@ -124,5 +125,7 @@ namespace DynamicPlanning {
         void publishDesiredTrajs();
 
         void publishGridMap();
+
+        void publishCommunicationRange();
     };
 }
