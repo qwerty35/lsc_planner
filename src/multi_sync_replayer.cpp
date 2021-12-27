@@ -3,13 +3,11 @@
 
 namespace DynamicPlanning{
     MultiSyncReplayer::MultiSyncReplayer(const ros::NodeHandle& _nh, Param _param, Mission _mission)
-                : nh(_nh), param(std::move(_param)), mission(std::move(_mission)), obstacle_generator(ObstacleGenerator(_nh, _mission))
+                : nh(_nh), param(std::move(_param)), mission(std::move(_mission))
     {
         pub_agent_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/agent_trajectories_history", 1);
         pub_obstacle_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_state_history", 1);
         pub_collision_model = nh.advertise<visualization_msgs::MarkerArray>("/collision_model", 1);
-//        pub_safety_margin_to_agents = nh.advertise<std_msgs::Float64MultiArray>("/safety_margin_to_agents", 1);
-//        pub_safety_margin_to_obstacles = nh.advertise<std_msgs::Float64MultiArray>("/safety_margin_to_obs", 1);
         pub_agent_velocities_x = nh.advertise<std_msgs::Float64MultiArray>("/agent_velocities_x", 1);
         pub_agent_velocities_y = nh.advertise<std_msgs::Float64MultiArray>("/agent_velocities_y", 1);
         pub_agent_velocities_z = nh.advertise<std_msgs::Float64MultiArray>("/agent_velocities_z", 1);
@@ -22,8 +20,10 @@ namespace DynamicPlanning{
         pub_world_boundary = nh.advertise<visualization_msgs::MarkerArray>("/world_boundary", 1);
         pub_collision_alert = nh.advertise<visualization_msgs::MarkerArray>("/collision_alert", 1);
 
-        timeStep = param.multisim_record_time_step;
+        timeStep = param.multisim_save_time_step;
         makeSpan = SP_INFINITY;
+
+        obstacle_generator.initialize(nh, mission);
     }
 
     void MultiSyncReplayer::initializeReplay() {
@@ -36,13 +36,6 @@ namespace DynamicPlanning{
 
         agent_state_history.resize(mission.qn);
         obstacle_state_history.resize(mission.on);
-
-//        safety_margin_to_agents_history.resize(mission.qn);
-//        safety_margin_to_obstacles_history.resize(mission.qn);
-//        safety_margin_to_agents_replay.data.clear();
-//        safety_margin_to_agents_replay.data.resize(mission.qn);
-//        safety_margin_to_obstacles_replay.data.clear();
-//        safety_margin_to_obstacles_replay.data.resize(mission.qn);
     }
 
     void MultiSyncReplayer::replay(double t) {
@@ -83,13 +76,13 @@ namespace DynamicPlanning{
             } else {
                 for (int qi = 0; qi < mission.qn; qi++) {
                     State state;
-                    state.position = point_t(std::stod(row[offset_agent * qi + 2]),
+                    state.position = point3d(std::stod(row[offset_agent * qi + 2]),
                                              std::stod(row[offset_agent * qi + 3]),
                                              std::stod(row[offset_agent * qi + 4]));
-                    state.velocity = point_t(std::stod(row[offset_agent * qi + 5]),
+                    state.velocity = point3d(std::stod(row[offset_agent * qi + 5]),
                                              std::stod(row[offset_agent * qi + 6]),
                                              std::stod(row[offset_agent * qi + 7]));
-                    state.acceleration = point_t(std::stod(row[offset_agent * qi + 8]),
+                    state.acceleration = point3d(std::stod(row[offset_agent * qi + 8]),
                                                  std::stod(row[offset_agent * qi + 9]),
                                                  std::stod(row[offset_agent * qi + 10]));
                     agent_state_history[qi].emplace_back(state);
@@ -145,9 +138,9 @@ namespace DynamicPlanning{
             double alpha = t/timeStep - idx;
             geometry_msgs::Point current_point;
             if(idx < agent_state_history[qi].size() - 1){
-                point_t p1 = agent_state_history[qi][idx].position;
-                point_t p2 = agent_state_history[qi][idx + 1].position;
-                point_t p_new = p1 * (1.0 - alpha) + p2 * alpha;
+                point3d p1 = agent_state_history[qi][idx].position;
+                point3d p2 = agent_state_history[qi][idx + 1].position;
+                point3d p_new = p1 * (1.0 - alpha) + p2 * alpha;
                 current_point = point3DToPointMsg(p_new);
             }
             else{
@@ -178,9 +171,9 @@ namespace DynamicPlanning{
             double alpha = t/timeStep - idx;
             geometry_msgs::Point current_point;
             if(idx < obstacle_state_history[oi].size() - 1){
-                point_t p1 = obstacle_state_history[oi][idx].position;
-                point_t p2 = obstacle_state_history[oi][idx + 1].position;
-                point_t p_new = p1 * (1.0 - alpha) + p2 * alpha;
+                point3d p1 = obstacle_state_history[oi][idx].position;
+                point3d p2 = obstacle_state_history[oi][idx + 1].position;
+                point3d p_new = p1 * (1.0 - alpha) + p2 * alpha;
                 current_point = point3DToPointMsg(p_new);
             }
 
@@ -405,10 +398,10 @@ namespace DynamicPlanning{
             double alpha = t/timeStep - idx;
             geometry_msgs::Point current_point;
             if(idx < agent_state_history[qi].size() - 1){
-                point_t current_velocity = agent_state_history[qi][idx].velocity * (1.0 - alpha)
-                                                    + agent_state_history[qi][idx + 1].velocity * alpha;
-                point_t current_acceleration = agent_state_history[qi][idx].acceleration * (1.0 - alpha)
-                                                        + agent_state_history[qi][idx + 1].acceleration * alpha;
+                point3d current_velocity = agent_state_history[qi][idx].velocity * (1.0 - alpha)
+                                           + agent_state_history[qi][idx + 1].velocity * alpha;
+                point3d current_acceleration = agent_state_history[qi][idx].acceleration * (1.0 - alpha)
+                                               + agent_state_history[qi][idx + 1].acceleration * alpha;
 
                 msg_agent_velocities_x.data[qi] = current_velocity.x();
                 msg_agent_velocities_y.data[qi] = current_velocity.y();

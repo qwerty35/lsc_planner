@@ -66,8 +66,8 @@ namespace DynamicPlanning {
             }
 
             Obstacle result = obstacle;
-            result.position = point_t(X_hat(0, 0), X_hat(1, 0), X_hat(2, 0));
-            result.velocity = point_t(X_hat(3, 0), X_hat(4, 0), X_hat(5, 0));
+            result.position = point3d(X_hat(0, 0), X_hat(1, 0), X_hat(2, 0));
+            result.velocity = point3d(X_hat(3, 0), X_hat(4, 0), X_hat(5, 0));
 
 //            double v = sqrt(pow(result.velocity.linear.x, 2) + pow(result.velocity.linear.y, 2) + pow(result.velocity.linear.z, 2));
 //            std::cout << "dt: " << dt << ", v: " << v << std::endl;

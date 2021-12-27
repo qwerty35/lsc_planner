@@ -1,309 +1,187 @@
 #include <traj_planner.hpp>
 
-namespace DynamicPlanning{
-    TrajPlanner::TrajPlanner(int _agent_id, const ros::NodeHandle& _nh,
-                             const Param& _param, const Mission& _mission,
-                             const std::shared_ptr<DynamicEDTOctomap>& _distmap_ptr)
-                             : nh(_nh), param(_param), mission(_mission), distmap_ptr(_distmap_ptr)
-    {
-        // Initialize agent
-        agent = mission.agents[_agent_id];
-        agent.current_state.position = mission.agents[_agent_id].start_position;
-
-        // Initialize flags
-        flag_current_state.is_updated = false;
-        flag_obstacles.is_updated = false;
-        flag_initialize_sfc = true;
-        prior_obs_id = -1;
-
-        // Initialize trajectory param, offsets
-        dim = param.world_dimension;
+namespace DynamicPlanning {
+    TrajPlanner::TrajPlanner(const ros::NodeHandle &_nh, const Param& _param, const Mission& _mission, int _agent_id)
+            : nh(_nh), param(_param), mission(_mission), constraints(_param, _mission) {
+        // Initialize useful constants
         M = param.M;
         n = param.n;
-        phi = param.phi;
-        if(param.N_constraint_segments < 0){
-            param.N_constraint_segments = M;
-        }
+        buildBernsteinBasis(n, B, B_inv);
 
         // Initialize initial, desired trajectory
         initial_traj.resize(M);
-        desired_traj.resize(M);
-        for(int m = 0; m < M; m++){
+        prev_traj.resize(M);
+        for (int m = 0; m < M; m++) {
             initial_traj[m].resize(n + 1);
-            desired_traj[m].resize(n + 1);
+            prev_traj[m].resize(n + 1);
         }
 
-        // Initialize planner states
-        planner_state = PlannerState::WAIT;
+        // Initialize planner state
         planner_seq = 0;
-        planning_report = PlanningReport::Initialized;
-        traj_cost = 0;
+        initialize_sfc = true;
+        prior_obs_id = -1;
 
         // Initialize trajectory optimization module
-        buildBernsteinBasis(n, B, B_inv);
         traj_optimizer = std::make_unique<TrajOptimizer>(param, mission, B);
 
         // Initialize RVO2
-        if(param.world_dimension == 2){
+        if (param.world_dimension == 2) {
             rvo_simulator_2d = std::make_unique<RVO2D::RVOSimulator>();
             rvo_simulator_2d->setTimeStep(0.5f);
-            rvo_simulator_2d->setAgentDefaults(15.0f,10, param.orca_horizon, param.orca_horizon,
-                                               agent.radius,
-                                               agent.max_vel[0] * param.ocra_pref_velocity_ratio);
-        }
-        else if(param.world_dimension == 3){
+            rvo_simulator_2d->setAgentDefaults(15.0f, 10, param.orca_horizon, param.orca_horizon,
+                                               mission.agents[_agent_id].radius,
+                                               mission.agents[_agent_id].max_vel[0] * param.ocra_pref_velocity_ratio);
+        } else if (param.world_dimension == 3) {
             rvo_simulator_3d = std::make_unique<RVO3D::RVOSimulator>();
             rvo_simulator_3d->setTimeStep(0.5f);
             rvo_simulator_3d->setAgentDefaults(15.0f, 10, param.orca_horizon,
-                                               agent.radius,
-                                               agent.max_vel[0] * param.ocra_pref_velocity_ratio);
-        }
-        else{
+                                               mission.agents[_agent_id].radius,
+                                               mission.agents[_agent_id].max_vel[0] * param.ocra_pref_velocity_ratio);
+        } else {
             throw std::invalid_argument("[TrajPlanner] Invalid simulation dimension");
         }
 
         // Initialize ROS
-        initializeROS();
+        initializeROS(_agent_id);
     }
 
-    PlanningReport TrajPlanner::plan(ros::Time _sim_current_time){
-        // Input check
-        if (!flag_obstacles.is_updated || !flag_current_state.is_updated ||
-            flag_current_state.planner_seq != planner_seq)
-        {
-            if (planner_seq == 0) {
-                planning_report = PlanningReport::Initialized;
-            } else {
-                planning_report = PlanningReport::WAITFORROSMSG;
-            }
-            return planning_report;
-        }
+    traj_t TrajPlanner::plan(const Agent& _agent,
+                             const std::shared_ptr<octomap::OcTree>& _octree_ptr,
+                             const std::shared_ptr<DynamicEDTOctomap>& _distmap_ptr,
+                             ros::Time _sim_current_time) {
 
-        // Initialize constraints
-        if(planner_seq == 0){
-            constraints.initialize(distmap_ptr, obs_slack_indices, param, mission);
-        }
-
-        // Update clock
+        // Initialize planner
+        ros::Time planning_start_time = ros::Time::now();
+        agent = _agent;
         sim_current_time = _sim_current_time;
+        octree_ptr = _octree_ptr;
+        distmap_ptr = _distmap_ptr;
+        constraints.setDistmap(distmap_ptr);
 
         // Start planning
         planner_seq++;
-        ros::Time planning_start_time = ros::Time::now();
-        planImpl();
+        statistics.planning_seq = planner_seq;
+        traj_t desired_traj = planImpl();
 
         // Re-initialization for replanning
-        flag_obstacles.is_updated = false;
-        flag_current_state.is_updated = false;
+        prev_traj = desired_traj;
         orca_velocities.clear();
-        obs_prev_trajs.clear();
 
         // Print terminal message
-        planning_time.total_planning_time.update((ros::Time::now() - planning_start_time).toSec());
-//        ROS_INFO_STREAM("[TrajPlanner] mav" << agent.id
-//                                               << ", planning time:" << planning_time.total_planning_time.current
-//                                               << ", QP cost:" << current_qp_cost);
+        statistics.planning_time.total_planning_time.update((ros::Time::now() - planning_start_time).toSec());
 
-        return planning_report;
+        return desired_traj;
     }
 
     void TrajPlanner::publish() {
-        // Publish goal, obs prediciton when arguments are all valid
         publishObstaclePrediction();
-
-        // Publish initial trajectory when it is generated
-        if (planning_report > PlanningReport::INITTRAJGENERATIONFAILED) {
-            publishInitialTraj();
-            publishGridPath();
-        }
-
-        // Publish collision constraints when they are generated
-        if (planning_report > PlanningReport::CONSTRAINTGENERATIONFAILED) {
-            publishCollisionConstraints();
-        }
+        publishInitialTraj();
+        publishGridPath();
+        publishCollisionConstraints();
     }
 
-    void TrajPlanner::setCurrentState(const dynamic_msgs::State& msg_current_state){
-        // update agent.current_state
-        if(param.world_dimension == 2){
-            agent.current_state.position = point_t(msg_current_state.pose.position.x,
-                                                   msg_current_state.pose.position.y,
-                                                   param.world_z_2d);
-        }
-        else{
-            agent.current_state.position = pointMsgToPoint3d(msg_current_state.pose.position);
-        }
-        agent.current_state.velocity = vector3MsgToPoint3d(msg_current_state.velocity.linear);
-        agent.current_state.acceleration = vector3MsgToPoint3d(msg_current_state.acceleration.linear);
+    void TrajPlanner::setObstacles(const dynamic_msgs::ObstacleArray &msg_obstacles) {
+        for (const auto &obstacle: msg_obstacles.obstacles) {
+            size_t oi = findObstacleIdxByObsId(obstacle.id);
 
-        // update flag
-        flag_current_state.is_updated = true;
-        flag_current_state.planner_seq = msg_current_state.planner_seq;
-        flag_current_state.updated_time = msg_current_state.header.stamp;
-    }
+            // if obstacle is not found, add it to obstacle vector
+            if (oi == -1) {
+                oi = obstacles.size();
+                obstacles.resize(oi + 1);
+            }
 
-    void TrajPlanner::setDistMap(const std::shared_ptr<DynamicEDTOctomap>& _distmap_ptr){
-        distmap_ptr = _distmap_ptr;
-    }
-
-    void TrajPlanner::setObstacles(const dynamic_msgs::ObstacleArray& msg_obstacles){
-        obstacles.clear();
-
-        size_t N_obs = msg_obstacles.obstacles.size();
-        obstacles.resize(N_obs);
-        for (int oi = 0; oi < N_obs; oi++) {
             obstacles[oi].start_time = msg_obstacles.start_time;
-            if(obstacles[oi].update_time < msg_obstacles.header.stamp){
+            if (obstacles[oi].update_time < msg_obstacles.header.stamp) {
                 obstacles[oi].update_time = msg_obstacles.header.stamp;
             }
 
-            obstacles[oi].id = msg_obstacles.obstacles[oi].id;
-            obstacles[oi].type = static_cast<ObstacleType>(msg_obstacles.obstacles[oi].type);
-            obstacles[oi].radius = msg_obstacles.obstacles[oi].radius;
-            obstacles[oi].downwash = msg_obstacles.obstacles[oi].downwash;
-            obstacles[oi].position = pointMsgToPoint3d(msg_obstacles.obstacles[oi].pose.position);
-            obstacles[oi].velocity = vector3MsgToPoint3d(msg_obstacles.obstacles[oi].velocity.linear);
-            obstacles[oi].max_acc = msg_obstacles.obstacles[oi].max_acc;
-            obstacles[oi].goal_position = pointMsgToPoint3d(msg_obstacles.obstacles[oi].goal);
+            obstacles[oi].id = obstacle.id;
+            obstacles[oi].type = static_cast<ObstacleType>(obstacle.type);
+            obstacles[oi].radius = obstacle.radius;
+            obstacles[oi].downwash = obstacle.downwash;
+            obstacles[oi].position = pointMsgToPoint3d(obstacle.pose.position);
+            obstacles[oi].velocity = vector3MsgToPoint3d(obstacle.velocity.linear);
+            obstacles[oi].max_acc = obstacle.max_acc;
+            obstacles[oi].goal_position = pointMsgToPoint3d(obstacle.goal);
+            obstacles[oi].prev_traj = trajMsgToTraj(obstacle.prev_traj);
         }
-
-        flag_obstacles.is_updated = true;
     }
 
-    void TrajPlanner::setObsPrevTrajs(const std::vector<traj_t>& _obs_prev_trajs) {
-        obs_prev_trajs = _obs_prev_trajs;
+    point3d TrajPlanner::getCurrentGoalPosition() const {
+        return agent.current_goal_position;
     }
 
-    void TrajPlanner::setStartPosition(const point_t& new_start_position) {
-        mission.agents[agent.id].start_position = new_start_position;
-        agent.start_position = new_start_position;
-    }
-
-    void TrajPlanner::setDesiredGoal(const point_t& new_desired_goal_position) {
-        mission.agents[agent.id].desired_goal_position = new_desired_goal_position;
-        agent.desired_goal_position = new_desired_goal_position;
-    }
-
-    void TrajPlanner::reset(const dynamic_msgs::State& msg_current_state) {
-        // Reset current state
-        setCurrentState(msg_current_state);
-
-        // Reset current trajectory
-        for(int m = 0; m < M; m++){
-            for(int i = 0; i < n + 1; i++){
-                desired_traj[m][i] = agent.current_state.position;
-            }
-        }
-
-        // Reset SFC
-        constraints.initializeSFC(agent.current_state.position, agent.radius);
-    }
-
-    void TrajPlanner::setPlannerState(const PlannerState& new_planner_state){
-        planner_state = new_planner_state;
-    }
-
-    point_t TrajPlanner::getCurrentPosition() const{
-        return agent.current_state.position;
-    }
-
-    dynamic_msgs::State TrajPlanner::getCurrentStateMsg() const{
-        dynamic_msgs::State msg_current_state;
-        msg_current_state.planner_seq = planner_seq;
-        msg_current_state.pose.position = point3DToPointMsg(agent.current_state.position);
-        msg_current_state.velocity = point3DToTwistMsg(agent.current_state.velocity);
-        msg_current_state.acceleration = point3DToTwistMsg(agent.current_state.acceleration);
-        return msg_current_state;
-    }
-
-    dynamic_msgs::State TrajPlanner::getFutureStateMsg(double future_time) const{
-        dynamic_msgs::State msg_current_state = getStateFromControlPoints(desired_traj, future_time,
-                                                                          M, n, param.dt);
-        msg_current_state.planner_seq = planner_seq;
-        return msg_current_state;
-    }
-
-    point_t TrajPlanner::getAgentORCAVelocity() const{
+    point3d TrajPlanner::getAgentORCAVelocity() const {
         return orca_velocities[0];
     }
 
-    point_t TrajPlanner::getObsORCAVelocity(int oi) const{
-        if(obstacles.size() < oi + 2){
+    point3d TrajPlanner::getObsORCAVelocity(int oi) const {
+        if (obstacles.size() < oi + 2) {
             throw std::invalid_argument("[TrajPlanner] orca velocity is not updated yet");
         }
 
-        if(obstacles[oi].type == ObstacleType::AGENT){
+        if (obstacles[oi].type == ObstacleType::AGENT) {
             return orca_velocities[oi + 1]; // orca_velocities[0] = agent's orca velocity
-        }
-        else if(obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE){
-            point_t obstacle_velocity = obstacles[oi].velocity;
-            if(param.world_dimension == 2){
+        } else if (obstacles[oi].type == ObstacleType::DYNAMICOBSTACLE) {
+            point3d obstacle_velocity = obstacles[oi].velocity;
+            if (param.world_dimension == 2) {
                 obstacle_velocity.z() = 0;
             }
             return obstacle_velocity;
-        }
-        else{
+        } else {
             throw std::invalid_argument("[TrajPlanner] invalid input of getObsORCAVelocity");
         }
     }
 
-    PlanningTimeStatistics TrajPlanner::getPlanningTime() const{
-        return planning_time;
+    PlanningStatistics TrajPlanner::getPlanningStatistics() const{
+        return statistics;
     }
 
-    double TrajPlanner::getTrajCost() const{
-        return traj_cost;
-    }
-
-    PlanningReport TrajPlanner::getPlanningReport() const{
-        return planning_report;
-    }
-
-    traj_t TrajPlanner::getTraj() const{
-        return desired_traj;
-    }
-
-    vector_t TrajPlanner::getNormalVector(int obs_id, int m) const{
-        int oi = findObstacleIdxByObsId(obs_id);
-        if(oi == -1){
-            throw std::invalid_argument("[TrajPlanner] invalid mav_id for normalVector");
-        }
-
-        return constraints.getLSC(oi, m, 0).normal_vector;
-    }
-
-    point_t TrajPlanner::getCurrentGoalPosition() const{
-        return agent.current_goal_position;
-    }
-
-    point_t TrajPlanner::getDesiredGoalPosition() const{
-        return agent.desired_goal_position;
-    }
-
-    int TrajPlanner::getPlannerSeq() const{
-        return planner_seq;
-    }
-
-    void TrajPlanner::initializeROS() {
+    void TrajPlanner::initializeROS(int agent_id) {
         // Initialize ros publisher and subscriber
-        std::string prefix = "/mav" + std::to_string(agent.id);
+        std::string prefix = "/mav" + std::to_string(agent_id);
         pub_collision_constraints_raw = nh.advertise<dynamic_msgs::CollisionConstraint>(
-                prefix + "_collision_constraints_raw", 1);
+                prefix + "/collision_constraints_raw", 1);
         pub_collision_constraints_vis = nh.advertise<visualization_msgs::MarkerArray>(
-                prefix + "_collision_constraints_vis", 1);
+                prefix + "/collision_constraints_vis", 1);
         pub_initial_traj_raw = nh.advertise<dynamic_msgs::TrajectoryArray>(
-                prefix + "_initial_traj_raw", 1);
+                prefix + "/initial_traj_raw", 1);
         pub_initial_traj_vis = nh.advertise<visualization_msgs::MarkerArray>(
-                prefix + "_initial_traj_vis", 1);
+                prefix + "/initial_traj_vis", 1);
         pub_obs_pred_traj_raw = nh.advertise<dynamic_msgs::TrajectoryArray>(
-                prefix + "_obs_pred_traj_raw", 1);
+                prefix + "/obs_pred_traj_raw", 1);
         pub_obs_pred_traj_vis = nh.advertise<visualization_msgs::MarkerArray>(
-                prefix + "_obs_pred_traj_vis", 1);
+                prefix + "/obs_pred_traj_vis", 1);
         pub_grid_path = nh.advertise<visualization_msgs::MarkerArray>(
-                prefix + "_grid_path_vis", 1);
+                prefix + "/grid_path_vis", 1);
     }
 
-    void TrajPlanner::planImpl(){
+//    void TrajPlanner::octomapCallback(const octomap_msgs::Octomap& octomap_msg){
+////        if(has_distmap){
+////            return;
+////        }
+////
+//
+////        auto* octree_ptr = dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(octomap_msg));
+////        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
+////                                                          mission.world_min, mission.world_max,
+////                                                          false);
+////        distmap_ptr->update();
+////        has_distmap = true;
+//
+//        float max_dist = 1.0; //TODO: parameterization
+//        has_local_octomap = true;
+//        octree_ptr = dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(octomap_msg));
+//
+////        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
+////                                                          mission.world_min, mission.world_max,
+////                                                          false);
+////        distmap_ptr->update();
+//    }
+
+    traj_t TrajPlanner::planImpl(){
+        traj_t desired_traj;
+
         // Check current planner mode is valid.
         checkPlannerMode();
 
@@ -311,33 +189,36 @@ namespace DynamicPlanning{
         ros::Time obs_pred_start_time = ros::Time::now();
         obstaclePrediction();
         ros::Time obs_pred_end_time = ros::Time::now();
-        planning_time.obstacle_prediction_time.update((obs_pred_end_time - obs_pred_start_time).toSec());
+        statistics.planning_time.obstacle_prediction_time.update((obs_pred_end_time - obs_pred_start_time).toSec());
 
         // Plan initial trajectory of current agent.
         ros::Time init_traj_planning_start_time = ros::Time::now();
         initialTrajPlanning();
         ros::Time init_traj_planning_end_time = ros::Time::now();
-        planning_time.initial_traj_planning_time.update((init_traj_planning_end_time - init_traj_planning_start_time).toSec());
+        statistics.planning_time.initial_traj_planning_time.update((init_traj_planning_end_time - init_traj_planning_start_time).toSec());
 
         // Goal planning
         ros::Time goal_planning_start_time = ros::Time::now();
         goalPlanning();
         ros::Time goal_planning_end_time = ros::Time::now();
-        planning_time.goal_planning_time.update((goal_planning_end_time - goal_planning_start_time).toSec());
+        statistics.planning_time.goal_planning_time.update((goal_planning_end_time - goal_planning_start_time).toSec());
 
         if(param.planner_mode == PlannerMode::ORCA){
-            planORCA();
+            desired_traj = planORCA();
         }
         else{
             // Plan LSC or BVC
-            planLSC();
+            desired_traj = planLSC();
         }
+
+        return desired_traj;
     }
 
-    void TrajPlanner::planORCA(){
+    traj_t TrajPlanner::planORCA(){
         updateORCAVelocity(false);
 
-        point_t new_velocity = getAgentORCAVelocity();
+        traj_t desired_traj;
+        point3d new_velocity = getAgentORCAVelocity();
         for(int m = 0; m < M; m++){
             for(int i = 0; i < n + 1; i++){
                 double m_intp = m + (double)i/n;
@@ -345,21 +226,16 @@ namespace DynamicPlanning{
             }
         }
 
-        planning_report = PlanningReport::SUCCESS;
+        return desired_traj;
     }
 
-    void TrajPlanner::planLSC(){
+    traj_t TrajPlanner::planLSC(){
         // Construct LSC (or BVC) and SFC
         generateCollisionConstraints();
 
         // Trajectory optimization
-        bool success = trajOptimization();
-        if (success) {
-            planning_report = PlanningReport::SUCCESS;
-        }
-        else { // if not success
-            planning_report = PlanningReport::QPFAILED;
-        }
+        traj_t desired_traj = trajOptimization();
+        return desired_traj;
     }
 
     void TrajPlanner::checkPlannerMode(){
@@ -413,20 +289,6 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::goalPlanning() {
-        // Patrol
-        if (planner_state == PlannerState::PATROL and
-        (agent.desired_goal_position - agent.current_state.position).norm() < param.goal_threshold) {
-            // Swap start and goal position
-            point_t temp = agent.desired_goal_position;
-            agent.desired_goal_position = agent.start_position;
-            agent.start_position = temp;
-        }
-        else if(planner_state == PlannerState::GOBACK){
-            // Go back to start position
-            agent.desired_goal_position = mission.agents[agent.id].start_position;
-            agent.start_position = mission.agents[agent.id].desired_goal_position;
-        }
-
         switch(param.goal_mode){
             case GoalMode::STATIC:
                 goalPlanningWithStaticGoal();
@@ -446,6 +308,9 @@ namespace DynamicPlanning{
             case GoalMode::PRIORBASED3:
                 goalPlanningWithPriority3();
                 break;
+            case GoalMode::ENTROPY:
+                goalPlanningWithEntropy();
+                break;
             default:
                 throw std::invalid_argument("[TrajPlanner] Invalid goal mode");
                 break;
@@ -458,7 +323,7 @@ namespace DynamicPlanning{
 
     void TrajPlanner::goalPlanningWithORCA() {
         updateORCAVelocity(false);
-        point_t orca_velocity = getAgentORCAVelocity();
+        point3d orca_velocity = getAgentORCAVelocity();
         agent.current_goal_position = agent.current_state.position + orca_velocity * M * param.dt;
         ClosestPoints closest_points;
         closest_points = closestPointsBetweenPointAndLineSegment(agent.desired_goal_position,
@@ -472,7 +337,7 @@ namespace DynamicPlanning{
     void TrajPlanner::goalPlanningWithRightHandRule() {
         // If the agent detect deadlock, then change the goal point to the right.
         if(isDeadlock()){
-            point_t z_axis(0, 0, 1);
+            point3d z_axis(0, 0, 1);
             agent.current_goal_position = agent.current_state.position +
                                           (agent.desired_goal_position - agent.current_state.position).cross(z_axis);
         }
@@ -495,8 +360,8 @@ namespace DynamicPlanning{
             }
 
             if(obstacles[oi].type == ObstacleType::AGENT) {
-                point_t obs_goal_position = obstacles[oi].goal_position;
-                point_t obs_curr_position = obstacles[oi].position;
+                point3d obs_goal_position = obstacles[oi].goal_position;
+                point3d obs_curr_position = obstacles[oi].position;
                 double obs_dist_to_goal = (obs_curr_position - obs_goal_position).norm();
                 double dist_to_obs = (obs_curr_position - agent.current_state.position).norm();
 
@@ -505,7 +370,7 @@ namespace DynamicPlanning{
                     continue;
                 }
                 // Do not consider the agents have the same direction
-                if(dist_to_goal > param.goal_threshold and (obs_prev_trajs[oi][M-1][n] - obs_prev_trajs[oi][0][n]).dot(obs_prev_trajs[oi][0][n] - agent.current_state.position) > 0){
+                if(dist_to_goal > param.goal_threshold and (obstacles[oi].prev_traj[M-1][n] - obstacles[oi].prev_traj[0][n]).dot(obstacles[oi].prev_traj[0][n] - agent.current_state.position) > 0){
                     continue;
                 }
                 // If the agent is near goal, all other agents have higher priority
@@ -524,7 +389,7 @@ namespace DynamicPlanning{
         double priority_dist_threshold = param.priority_dist_threshold;
         double dist_keep = priority_dist_threshold + 0.1; //TODO: param need to consider radius of agents!
         if(min_dist_to_obs < priority_dist_threshold){
-            point_t obs_curr_position = obstacles[closest_obs_id].position;
+            point3d obs_curr_position = obstacles[closest_obs_id].position;
             agent.current_goal_position = agent.current_state.position -
                                           (obs_curr_position - agent.current_state.position).normalized() * dist_keep;
             return;
@@ -543,7 +408,7 @@ namespace DynamicPlanning{
         }
 
         // Find los-free goal from end of the initial trajectory
-        point_t los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
+        point3d los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M - 1][n],
                                                                    agent.desired_goal_position,
                                                                    agent.radius);
         agent.current_goal_position = los_free_goal;
@@ -559,9 +424,9 @@ namespace DynamicPlanning{
                 higher_priority_agents.emplace(obstacles[oi].id);
                 continue;
             } else if (obstacles[oi].type == ObstacleType::AGENT) {
-                point_t obs_goal_position = obstacles[oi].goal_position;
-                point_t obs_curr_position = obstacles[oi].position;
-                point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
+                point3d obs_goal_position = obstacles[oi].goal_position;
+                point3d obs_curr_position = obstacles[oi].position;
+                point3d obs_future_position = obs_pred_trajs[oi][M - 1][n];
 
                 if(obs_curr_position.distance(agent.current_state.position) > 3.0){ //TODO: parameter
                     continue;
@@ -593,7 +458,7 @@ namespace DynamicPlanning{
         }
 
         // Find los-free goal from end of the initial trajectory
-        point_t los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
+        point3d los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M - 1][n],
                                                                    agent.desired_goal_position,
                                                                    agent.radius);
 
@@ -601,7 +466,7 @@ namespace DynamicPlanning{
         //TODO: ghost
         if(prior_obs_id != -1) {
             int prior_obs_idx = findObstacleIdxByObsId(prior_obs_id);
-            point_t prior_obs_future_position = obs_pred_trajs[prior_obs_idx][M - 1][n];
+            point3d prior_obs_future_position = obs_pred_trajs[prior_obs_idx][M - 1][n];
             ClosestPoints closest_points = closestPointsBetweenPointAndLineSegment(prior_obs_future_position,
                                                                                    agent.current_state.position,
                                                                                    los_free_goal);
@@ -614,13 +479,13 @@ namespace DynamicPlanning{
         // Find cluster
         std::set<int> cluster; // set of obstacle idx
         std::queue<int> search_queue; // queue of obstacle idx
-        point_t agent_future_position = initial_traj[M-1][n];
+        point3d agent_future_position = initial_traj[M - 1][n];
         int prior_obs_cand_idx = -1;
         double min_dist_to_goal = SP_INFINITY;
         double cluster_margin = 0.1;
         for(int oi = 0; oi < obstacles.size(); oi++) {
             if (obstacles[oi].type == ObstacleType::AGENT) {
-                point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
+                point3d obs_future_position = obs_pred_trajs[oi][M - 1][n];
                 double future_dist_to_obs = ellipsoidalDistance(obs_future_position, agent_future_position,
                                                                 agent.downwash);
                 double safety_distance = obstacles[oi].radius + agent.radius + cluster_margin;
@@ -643,7 +508,7 @@ namespace DynamicPlanning{
         }
         while(not search_queue.empty()){
             int search_obs_idx = search_queue.front();
-            point_t search_obs_future_position = obs_pred_trajs[search_obs_idx][M - 1][n];
+            point3d search_obs_future_position = obs_pred_trajs[search_obs_idx][M - 1][n];
             search_queue.pop();
 
             for(int oi = 0; oi < obstacles.size(); oi++){
@@ -651,7 +516,7 @@ namespace DynamicPlanning{
                     continue;
                 }
 
-                point_t obs_future_position = obs_pred_trajs[oi][M-1][n];
+                point3d obs_future_position = obs_pred_trajs[oi][M - 1][n];
                 double future_dist_to_obs = ellipsoidalDistance(obs_future_position, search_obs_future_position,
                                                                 obstacles[search_obs_idx].downwash);
                 double safety_distance = obstacles[oi].radius + obstacles[search_obs_idx].radius + cluster_margin;
@@ -708,8 +573,8 @@ namespace DynamicPlanning{
         if(prior_obs_id != -1){
             int prior_obs_idx = findObstacleIdxByObsId(prior_obs_id);
             double dist_keep = (obstacles[prior_obs_idx].radius + agent.radius) * 2.0;
-            point_t z_axis(0, 0, 1);
-            point_t right_hand_direction = (obstacles[prior_obs_idx].position - agent.current_state.position).cross(z_axis).normalized();
+            point3d z_axis(0, 0, 1);
+            point3d right_hand_direction = (obstacles[prior_obs_idx].position - agent.current_state.position).cross(z_axis).normalized();
 
             // Check right hand rule can be used.
             double right_hand_margin;
@@ -741,7 +606,7 @@ namespace DynamicPlanning{
                 agent.current_goal_position = agent.current_state.position + right_hand_direction.normalized() * std::min(right_hand_margin, dist_keep);
             }
             else{
-                point_t obs_curr_position = obstacles[prior_obs_idx].position; //TODO: 여기가 문제인가? closest higher priority?
+                point3d obs_curr_position = obstacles[prior_obs_idx].position; //TODO: 여기가 문제인가? closest higher priority?
                 agent.current_goal_position = agent.current_state.position +
                         (agent.current_state.position - obs_curr_position).normalized() * dist_keep;
             }
@@ -763,9 +628,9 @@ namespace DynamicPlanning{
                 higher_priority_agents.emplace(obstacles[oi].id);
                 continue;
             } else if (obstacles[oi].type == ObstacleType::AGENT) {
-                point_t obs_goal_position = obstacles[oi].goal_position;
-                point_t obs_curr_position = obstacles[oi].position;
-                point_t obs_future_position = obs_pred_trajs[oi][M - 1][n];
+                point3d obs_goal_position = obstacles[oi].goal_position;
+                point3d obs_curr_position = obstacles[oi].position;
+                point3d obs_future_position = obs_pred_trajs[oi][M - 1][n];
 
                 // Impose the higher priority to the agents with smaller dist_to_goal
                 // Do not consider the agents that have the same direction.
@@ -787,13 +652,13 @@ namespace DynamicPlanning{
             }
         }
 
-        if(isDeadlock()){
-//        if(min_dist_to_obs < param.priority_dist_threshold){
+        if(isDeadlock() and closest_obs_idx != -1){
+//        if(min_dist_to_obs < param.priority_dist_threshold and closest_obs_idx != -1){
 //            double dist_keep = (obstacles[closest_obs_idx].radius + agent.radius) * 2.0;
             double dist_keep = param.priority_dist_threshold + 0.1;
-            vector_t obs_to_agent_direction = agent.current_state.position - obstacles[closest_obs_idx].position;
-            vector_t back_direction = obs_to_agent_direction.normalized();
-            vector_t surface_direction;
+            vector3d obs_to_agent_direction = agent.current_state.position - obstacles[closest_obs_idx].position;
+            vector3d back_direction = obs_to_agent_direction.normalized();
+            vector3d surface_direction;
 
             agent.current_goal_position = findProperGoalByDirection(agent.current_state.position, back_direction,
                                                                     dist_keep);
@@ -814,22 +679,25 @@ namespace DynamicPlanning{
         }
 
         // Find los-free goal from end of the initial trajectory
-        point_t los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M-1][n],
-                                                                   agent.desired_goal_position,
-                                                                   agent.radius);
+//        point3d los_free_goal = grid_based_planner.findLOSFreeGoal(initial_traj[M - 1][n],
+//                                                                   agent.desired_goal_position,
+//                                                                   agent.radius);
+        grid_path.emplace_back(agent.desired_goal_position);
+        point3d los_free_goal = constraints.findProperGoal(initial_traj[M-1][n],
+                                                           agent.desired_goal_position,
+                                                           grid_path);
 
         for(int oi = 0; oi < obstacles.size(); oi++){
-            point_t obs_future_position = obs_pred_trajs[oi][M-1][n];
-            point_t agent_future_position = initial_traj[M-1][n];
-            double margin = 0.01;
+            point3d obs_future_position = obs_pred_trajs[oi][M - 1][n];
+            point3d agent_future_position = initial_traj[M - 1][n];
+            double margin = 0.05;
             double safety_distance = agent.radius + obstacles[oi].radius;
             if(obs_future_position.distance(agent_future_position) < safety_distance + margin){
-                vector_t z_axis(0, 0, 1);
-                vector_t right_hand_direction = (los_free_goal - agent.current_state.position).cross(z_axis).normalized();
+                vector3d z_axis(0, 0, 1);
+                vector3d right_hand_direction = (los_free_goal - agent.current_state.position).cross(z_axis).normalized();
                 double dist_keep = std::max(safety_distance * 3.0, (los_free_goal - agent.current_state.position).norm());
 //                agent.current_goal_position = findProperGoalByDirection(agent.current_state.position, right_hand_direction, dist_keep);
                 agent.current_goal_position = agent.current_state.position + right_hand_direction * dist_keep;
-
 //                agent.current_goal_position = agent.current_state.position +
 //                                              (agent.desired_goal_position - agent.current_state.position).cross(z_axis);
 
@@ -837,8 +705,122 @@ namespace DynamicPlanning{
             }
         }
 
-
         agent.current_goal_position = los_free_goal;
+    }
+
+    void TrajPlanner::goalPlanningWithEntropy(){
+//        if(!has_local_octomap) {
+//            agent.current_goal_position = agent.current_state.position;
+//            return;
+//        }
+
+        std::vector<point3d> goal_cands;
+        double sqrt_half = sqrt(0.5);
+        double radius = param.sensor_range;
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(1, 0, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(sqrt_half, sqrt_half, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(0, 1, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(-sqrt_half, sqrt_half, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(-1, 0, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(-sqrt_half, -sqrt_half, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(0, -1, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(sqrt_half, -sqrt_half, 0) * radius);
+
+        radius *= 0.5;
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(1, 0, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(sqrt_half, sqrt_half, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(0, 1, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(-sqrt_half, sqrt_half, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(-1, 0, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(-sqrt_half, -sqrt_half, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(0, -1, 0) * radius);
+        goal_cands.emplace_back(
+                agent.current_state.position + point3d(sqrt_half, -sqrt_half, 0) * radius);
+
+        double entropy, max_entropy = 0, entropy_sum = 0;
+
+        for(const auto& goal_cand : goal_cands){
+            if(distmap_ptr->getDistance(goal_cand) < agent.radius){
+                continue;
+            }
+
+            entropy = computeEntropy(goal_cand);
+            entropy_sum += entropy;
+            if(entropy > max_entropy){
+                agent.current_goal_position = goal_cand;
+                max_entropy = entropy;
+            }
+        }
+        double current_entropy = computeEntropy(agent.current_state.position);
+        entropy_sum += current_entropy;
+
+        ROS_INFO_STREAM("entropy_sum: " << entropy_sum);
+
+        if(entropy_sum < 70){
+            agent.current_goal_position = agent.desired_goal_position;
+        }
+
+        GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
+        grid_path = grid_based_planner.plan(agent.current_state.position, agent.current_goal_position,
+                                            agent.id, agent.radius, agent.downwash,
+                                            obstacles);
+
+        constraints.updateSFCLibrary(grid_path, agent.radius);
+        agent.current_goal_position = constraints.findProperGoal(initial_traj[M-1][n],
+                                                                 agent.current_goal_position,
+                                                                 grid_path);
+    }
+
+    double TrajPlanner::computeEntropy(const point3d& search_point){
+//        if(!has_local_octomap){
+//            return -1;
+//        }
+
+        point3d sensor_range_vector = point3d(1, 1, 1) * param.sensor_range * 0.5;
+        point3d min = search_point - sensor_range_vector;
+        point3d max = search_point + sensor_range_vector;
+
+        SFC world_boundary(mission.world_min, mission.world_max);
+
+        if(!world_boundary.isPointInSFC(search_point)){
+            return -1;
+        }
+
+        double entropy = 0;
+        int count = 0;
+        for (double x = min.x(); x < max.x(); x += param.world_resolution) {
+            for (double y = min.y(); y < max.y(); y += param.world_resolution) {
+                point3d point(x, y, param.world_z_2d);
+
+                if(!world_boundary.isPointInSFC(point)){
+                    continue;
+                }
+
+                double occupancy, node_size;
+                auto node = octree_ptr->search(point, 0);
+                if (node == nullptr) {
+                    occupancy = 0.5;
+                    entropy += occupancy * -log(occupancy) + (1 - occupancy) * -log((1 - occupancy));
+                }
+            }
+        }
+
+        return entropy;
     }
 
     void TrajPlanner::obstaclePrediction(){
@@ -966,13 +948,13 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::obstaclePredictionWithORCA(){
-        point_t new_velocity;
+        point3d new_velocity;
         updateORCAVelocity(true);
 
         for (int oi = 0; oi < obstacles.size(); oi++) {
             obs_pred_trajs[oi].resize(M);
-            point_t obstacle_position = obstacles[oi].position;
-            point_t orca_velocity = getObsORCAVelocity(oi);
+            point3d obstacle_position = obstacles[oi].position;
+            point3d orca_velocity = getObsORCAVelocity(oi);
             for (int m = 0; m < M; m++) {
                 obs_pred_trajs[oi][m].resize(n + 1);
                 for(int i = 0; i < n + 1; i++){
@@ -1005,10 +987,10 @@ namespace DynamicPlanning{
                     obs_pred_trajs[oi][m].resize(n + 1);
                     if (m == M - 1) {
                         for(int i = 0; i < n + 1; i++){
-                            obs_pred_trajs[oi][M-1][i] = obs_prev_trajs[oi][M-1][n];
+                            obs_pred_trajs[oi][M-1][i] = obstacles[oi].prev_traj[M-1][n];
                         }
                     } else {
-                        obs_pred_trajs[oi][m] = obs_prev_trajs[oi][m + 1];
+                        obs_pred_trajs[oi][m] = obstacles[oi].prev_traj[m + 1];
                     }
                 }
             }
@@ -1020,8 +1002,8 @@ namespace DynamicPlanning{
 
     void TrajPlanner::obstaclePredictionCheck(){
         for(int oi = 0; oi < obstacles.size(); oi++) {
-            point_t obs_position = obstacles[oi].position;
-            if ((obs_pred_trajs[oi][0][0] - obs_position).norm() > param.multisim_reset_threshold) {
+            point3d obs_position = obstacles[oi].position;
+            if ((obs_pred_trajs[oi][0][0] - obs_position).norm() > param.reset_threshold) {
                 obs_slack_indices.emplace(oi);
                 for(int m = 0; m < M; m++){
                     for(int i = 0; i < n + 1; i++){
@@ -1157,10 +1139,10 @@ namespace DynamicPlanning{
                 initial_traj[m].resize(n + 1);
                 if (m == M - 1) {
                     for(int i = 0; i < n + 1; i++){
-                        initial_traj[M - 1][i] = desired_traj[M - 1][n];
+                        initial_traj[M - 1][i] = prev_traj[M - 1][n];
                     }
                 } else {
-                    initial_traj[m] = desired_traj[m + 1];
+                    initial_traj[m] = prev_traj[m + 1];
                 }
             }
         }
@@ -1172,7 +1154,7 @@ namespace DynamicPlanning{
     void TrajPlanner::initialTrajPlanningORCA(){
         updateORCAVelocity(false);
 
-        point_t new_velocity = getAgentORCAVelocity();
+        point3d new_velocity = getAgentORCAVelocity();
         for (int m = 0; m < M; m++) {
             for (int i = 0; i < n + 1; i++) {
                 double m_intp = m + (double) i / n;
@@ -1199,7 +1181,7 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::initialTrajPlanningCheck(){
-        if((initial_traj[0][0] - agent.current_state.position).norm() > param.multisim_reset_threshold){
+        if((initial_traj[0][0] - agent.current_state.position).norm() > param.reset_threshold){
             for(int oi = 0; oi < obstacles.size(); oi++){
                 obs_slack_indices.emplace(oi);
             }
@@ -1210,7 +1192,7 @@ namespace DynamicPlanning{
                 }
             }
 
-            flag_initialize_sfc = true;
+            initialize_sfc = true;
         }
     }
 
@@ -1292,7 +1274,7 @@ namespace DynamicPlanning{
         orca_velocities.resize(N_obs + 1);
         for(size_t i : agentsList){
             RVO2D::Vector2 rvo_orca_velocity = rvo_simulator_2d->getAgentVelocity(i);
-            point_t orca_velocity = point_t(rvo_orca_velocity.x(), rvo_orca_velocity.y(), 0);
+            point3d orca_velocity = point3d(rvo_orca_velocity.x(), rvo_orca_velocity.y(), 0);
             orca_velocities[i] = orca_velocity;
         }
 
@@ -1368,9 +1350,9 @@ namespace DynamicPlanning{
         orca_velocities.resize(N_obs + 1);
         for (auto qi : agentsList) {
             RVO3D::Vector3 orca_velocity = rvo_simulator_3d->getAgentVelocity(qi);
-            orca_velocities[qi] = point_t(orca_velocity.x(),
-                                                   orca_velocity.y(),
-                                                   orca_velocity.z());
+            orca_velocities[qi] = point3d(orca_velocity.x(),
+                                          orca_velocity.y(),
+                                          orca_velocity.z());
         }
 
         // delete all agents and obstacles
@@ -1378,7 +1360,6 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::generateCollisionConstraints(){
-
         // LSC (or BVC) construction
         ros::Time lsc_start_time = ros::Time::now();
         constraints.initializeLSC(obstacles.size());
@@ -1395,20 +1376,20 @@ namespace DynamicPlanning{
             throw std::invalid_argument("[TrajPlanner] Invalid planner mode");
         }
         ros::Time lsc_end_time = ros::Time::now();
-        planning_time.lsc_generation_time.update((lsc_end_time - lsc_start_time).toSec());
+        statistics.planning_time.lsc_generation_time.update((lsc_end_time - lsc_start_time).toSec());
 
         // SFC construction
         if(param.world_use_octomap){
             ros::Time sfc_start_time = ros::Time::now();
             generateSFC();
             ros::Time sfc_end_time = ros::Time::now();
-            planning_time.sfc_generation_time.update((sfc_end_time - sfc_start_time).toSec());
+            statistics.planning_time.sfc_generation_time.update((sfc_end_time - sfc_start_time).toSec());
         }
     }
 
     void TrajPlanner::generateReciprocalRSFC() {
         double closest_dist;
-        point_t normal_vector;
+        point3d normal_vector;
 
         for (int oi = 0; oi < obstacles.size(); oi++) {
             for (int m = 0; m < M; m++) {
@@ -1420,7 +1401,7 @@ namespace DynamicPlanning{
 
                 std::vector<double> d;
                 d.resize(n + 1);
-                point_t p_init_rel_start, p_init_rel_end;
+                point3d p_init_rel_start, p_init_rel_end;
                 p_init_rel_start = initial_traj[m][0] - obs_pred_trajs[oi][m][0];
                 p_init_rel_end = initial_traj[m][n] - obs_pred_trajs[oi][m][n];
 
@@ -1474,7 +1455,7 @@ namespace DynamicPlanning{
             }
         }
 
-        point_t normal_vector;
+        point3d normal_vector;
         for (int oi = 0; oi < obstacles.size(); oi++) {
             // Compute downwash between agents
             double downwash;
@@ -1532,7 +1513,7 @@ namespace DynamicPlanning{
 
     void TrajPlanner::generateBVC(){
         // Since the original BVC does not consider downwash, we conduct coordinate transformation to consider downwash.
-        point_t normal_vector;
+        point3d normal_vector;
         for (int oi = 0; oi < obstacles.size(); oi++) {
             // Compute downwash
             double downwash = (agent.downwash * agent.radius + obstacles[oi].downwash * obstacles[oi].radius) /
@@ -1564,9 +1545,9 @@ namespace DynamicPlanning{
     }
 
     void TrajPlanner::generateSFC(){
-        if(flag_initialize_sfc){
+        if(initialize_sfc){
             constraints.initializeSFC(agent.current_state.position, agent.radius);
-            flag_initialize_sfc = false;
+            initialize_sfc = false;
         }
         else{
             constraints.generateFeasibleSFC(initial_traj[M-1][n], agent.current_goal_position,
@@ -1574,13 +1555,16 @@ namespace DynamicPlanning{
         }
     }
 
-    bool TrajPlanner::trajOptimization() {
+    traj_t TrajPlanner::trajOptimization() {
         Timer timer;
+        traj_t desired_traj;
 
         // Solve QP problem using CPLEX
         timer.reset();
         try{
+            double traj_cost;
             desired_traj = traj_optimizer->solve(agent, constraints, traj_cost);
+            statistics.traj_cost = traj_cost;
         }
         catch(...){
             // debug code
@@ -1605,9 +1589,9 @@ namespace DynamicPlanning{
             }
         }
         timer.stop();
-        planning_time.traj_optimization_time.update(timer.elapsedSeconds());
+        statistics.planning_time.traj_optimization_time.update(timer.elapsedSeconds());
 
-        return true;
+        return desired_traj;
     }
 
     void TrajPlanner::publishCollisionConstraints() {
@@ -1783,8 +1767,8 @@ namespace DynamicPlanning{
         return obstacles[obs_idx].goal_position.distance(obstacles[obs_idx].position);
     }
 
-    double TrajPlanner::computeCollisionTimeToDistmap(const point_t& start_position,
-                                                      const point_t& goal_position,
+    double TrajPlanner::computeCollisionTimeToDistmap(const point3d& start_position,
+                                                      const point3d& goal_position,
                                                       double agent_radius,
                                                       double time_horizon){
         double collision_time = 0;
@@ -1801,7 +1785,7 @@ namespace DynamicPlanning{
 
         double search_time_step = 0.1; //TODO: parameterization
         double current_time = 0;
-        point_t current_search_point;
+        point3d current_search_point;
         while(!isCollided and current_time < time_horizon){
             current_time += search_time_step;
             current_search_point = start_position + (goal_position - start_position) * (current_time / time_horizon);
@@ -1877,32 +1861,32 @@ namespace DynamicPlanning{
         return min_collision_time;
     }
 
-    point_t TrajPlanner::normalVector(const point_t& obs_start, const point_t& obs_goal,
-                                      const point_t& agent_start, const point_t& agent_goal,
+    point3d TrajPlanner::normalVector(const point3d& obs_start, const point3d& obs_goal,
+                                      const point3d& agent_start, const point3d& agent_goal,
                                       double& closest_dist) {
         ClosestPoints closest_points;
         closest_points = closestPointsBetweenLinePaths(obs_start, obs_goal, agent_start, agent_goal);
         closest_dist = closest_points.dist;
 
-        point_t delta, normal_vector;
+        point3d delta, normal_vector;
         delta = closest_points.closest_point2 - closest_points.closest_point1;
         normal_vector = delta.normalized();
         if (normal_vector.norm() == 0) {
             ROS_WARN("[Util] heuristic method was used to get normal vector");
-            point_t a, b;
+            point3d a, b;
             a = agent_start - obs_start;
             b = agent_goal - obs_goal;
             if(a.norm() == 0 and b.norm() == 0){
-                normal_vector = point_t(1, 0, 0);
+                normal_vector = point3d(1, 0, 0);
             }
             else{
-                normal_vector = (b - a).cross(point_t(0, 0, 1));
+                normal_vector = (b - a).cross(point3d(0, 0, 1));
             }
         }
         return normal_vector;
     }
 
-    point_t TrajPlanner::normalVectorBetweenPolys(const points_t &control_points_agent,
+    point3d TrajPlanner::normalVectorBetweenPolys(const points_t &control_points_agent,
                                                   const points_t &control_points_obs) {
         size_t n_control_points = control_points_agent.size();
         points_t control_points_rel;
@@ -1911,15 +1895,15 @@ namespace DynamicPlanning{
             control_points_rel[i] = control_points_agent[i] - control_points_obs[i];
         }
 
-        ClosestPoints closest_points = closestPointsBetweenPointAndConvexHull(point_t(0,0,0),
+        ClosestPoints closest_points = closestPointsBetweenPointAndConvexHull(point3d(0, 0, 0),
                                                                               control_points_rel);
-        point_t normal_vector = closest_points.closest_point2.normalized();
+        point3d normal_vector = closest_points.closest_point2.normalized();
         return normal_vector;
     }
 
-    point_t TrajPlanner::findProperGoalByDirection(const point_t& start, const vector_t& direction, double dist_keep){
-        point_t goal;
-        vector_t surface_direction;
+    point3d TrajPlanner::findProperGoalByDirection(const point3d& start, const vector3d& direction, double dist_keep){
+        point3d goal;
+        vector3d surface_direction;
         double margin;
 
         if(param.world_use_octomap and planner_seq > 1){
@@ -1934,7 +1918,7 @@ namespace DynamicPlanning{
             goal = agent.current_state.position + direction * dist_keep;
         }
         else{
-            point_t wall_direction = (direction - surface_direction * surface_direction.dot(direction)).normalized();
+            point3d wall_direction = (direction - surface_direction * surface_direction.dot(direction)).normalized();
             goal = agent.current_state.position + direction * margin + wall_direction * (dist_keep - margin);
         }
 

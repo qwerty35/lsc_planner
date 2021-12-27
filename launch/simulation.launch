@@ -3,15 +3,16 @@
 <launch>
 <!-- Parameters -->
   <!-- Mission -->
-  <arg name="mission" default="circle16.json" /> <!-- mission file, see lsc_planner/missions/readme.txt for more details -->
+  <arg name="mission" default="square16.json" /> <!-- mission file, see lsc_planner/missions/readme.txt for more details -->
   <arg name="experiment" default="false" />
   <arg name="patrol" default="false"/> <!-- Change the mission to patrol between start and goal points -->
 
   <!-- Map -->
-  <arg name="use_octomap" default="false"/> <!-- Use octomap to set obstacle environment, octomap must be stored in lsc_planner/world  -->
+  <arg name="use_octomap" default="true"/> <!-- Use octomap to set obstacle environment, octomap must be stored in lsc_planner/world  -->
   <arg name="world_frame_id" default="world"/> <!-- world frame id used in Rviz -->
   <arg name="world_file_name" default="forest.bt"/> <!-- Octomap file name, it must be bt file -->
   <arg name="world_resolution" default="0.1"/> <!-- Octomap resolution -->
+  <arg name="world_use_global_map" default="true"/>
 
   <!-- Visualization -->
   <arg name="rviz" default="true" /> <!-- See the planning result in the rviz -->
@@ -28,6 +29,8 @@
 
 <!-- Nodes -->
   <node pkg="lsc_planner" type="multi_sync_simulator_node" name="multi_sync_simulator_node" output="screen">
+    <param name="/use_sim_time" value="true"/>
+
     <param name="mission" value="$(arg mission)" />
     <param name="log" value="$(arg log)" />
 
@@ -38,15 +41,18 @@
     <param name="world/file_name" value="$(arg world_file_name)" />
     <param name="world/resolution" value="$(arg world_resolution)" />
     <param name="world/z_2d" value="0.3" /> <!-- Z position of the agents when world/dimension is 2 -->
+    <param name="world/use_global_map" value="$(arg world_use_global_map)" />
 
     <!-- Multisim setting -->
     <param name="multisim/planning_rate" value="-1"/> <!-- Delay between iteration, if planning_rate is -1, then no delay -->
     <param name="multisim/qn" value="2" /> <!-- The number of agents when the agents is empty in the mission file -->
     <param name="multisim/time_step" value="0.2" /> <!-- Replanning period, if you use LSC planner then it must be equal to traj/dt -->
     <param name="multisim/patrol" value="$(arg patrol)"/>
-    <param name="multisim/max_noise" value="0.1" /> <!-- If it is larger than 0, then it adds some noise to start and goal point -->
+    <param name="multisim/use_global_map" value="false"/>
+    <param name="multisim/max_noise" value="0.05" /> <!-- If it is larger than 0, then it adds some noise to start and goal point -->
     <param name="multisim/max_planner_iteration" value="1000" /> <!-- Maximum iteration of the planner -->
     <param name="multisim/save_result" value="$(arg save_result_csv)" />
+    <param name="multisim/save_mission" value="false" />
     <param name="multisim/replay" value="$(arg replay)" />
     <param name="multisim/replay_file_name" value="$(arg replay_file_name)" />
     <param name="multisim/record_time_step" value="0.1" /> <!-- Record time step -->
@@ -83,17 +89,16 @@
     <param name="grid/margin" value="0.1" /> <!-- For each grid point, grid_point is not occupied if dist_to_obs > agent_radius + grid_margin -->
 
     <!-- Goal -->
-    <param name="plan/goal_threshold" value="0.2" /> <!-- If distance between the agent and goal point is smaller than this, then the agent judges that the mission is complete -->
+    <param name="plan/goal_threshold" value="0.1" /> <!-- If distance between the agent and goal point is smaller than this, then the agent judges that the mission is complete -->
     <param name="plan/goal_radius" value="2.0" />
     <param name="plan/priority_dist_threshold" value="0.4" />
 
     <!-- Communication -->
-    <param name="communication/range" value="3.0" />
+    <param name="communication/range" value="-1" />
 
     <!-- Exploration -->
-    <param name="sensor/range" value="3.0" />
-
-
+    <param name="sensor/range" value="1.5" />
+<!--    <remap from="/global_map" to="/octomap_point_cloud_centers"/>-->
   </node>
 
   <node pkg="rviz" type="rviz" name="rviz"

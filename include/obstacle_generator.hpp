@@ -19,7 +19,11 @@
 namespace DynamicPlanning {
     class ObstacleGenerator {
     public:
-        ObstacleGenerator(const ros::NodeHandle &_nh, const Mission& _mission) : nh(_nh), mission(_mission) {
+        ObstacleGenerator() = default;
+
+        void initialize(const ros::NodeHandle &_nh, const Mission& _mission){
+            nh = _nh;
+            mission = _mission;
             pubs_obstacles.resize(mission.qn);
             for(int qi = 0; qi < mission.qn; qi++){
                 pubs_obstacles[qi] = nh.advertise<dynamic_msgs::ObstacleArray>("/mav" + std::to_string(qi) + "_obstacles_state", 1);
@@ -61,7 +65,7 @@ namespace DynamicPlanning {
             publishObstacles();
         }
 
-        int getNumObs() const {
+        [[nodiscard]] int getNumObs() const {
             return mission.on;
         }
 

@@ -37,16 +37,16 @@ namespace DynamicPlanning {
         return msg;
     }
 
-    static point_t pointMsgToPoint3d(const geometry_msgs::Point& msg){
-        return point_t(msg.x, msg.y, msg.z);
+    static point3d pointMsgToPoint3d(const geometry_msgs::Point& msg){
+        return point3d(msg.x, msg.y, msg.z);
     }
 
-    static point_t vector3MsgToPoint3d(const geometry_msgs::Vector3& msg){
-        return point_t(msg.x, msg.y, msg.z);
+    static point3d vector3MsgToPoint3d(const geometry_msgs::Vector3& msg){
+        return point3d(msg.x, msg.y, msg.z);
     }
 
-    static point_t vector3MsgToPoint3d(const tf::Vector3& vector){
-        return point_t(vector.x(), vector.y(), vector.z());
+    static point3d vector3MsgToPoint3d(const tf::Vector3& vector){
+        return point3d(vector.x(), vector.y(), vector.z());
     }
 
     static geometry_msgs::Point vector3MsgToPointMsg(const tf::Vector3& vector){
@@ -57,7 +57,7 @@ namespace DynamicPlanning {
         return point;
     }
 
-    static geometry_msgs::Vector3 point3DToVector3Msg(const point_t& point){
+    static geometry_msgs::Vector3 point3DToVector3Msg(const point3d& point){
         geometry_msgs::Vector3 vector;
         vector.x = point.x();
         vector.y = point.y();
@@ -65,7 +65,7 @@ namespace DynamicPlanning {
         return vector;
     }
 
-    static geometry_msgs::Point point3DToPointMsg(const point_t& point){
+    static geometry_msgs::Point point3DToPointMsg(const point3d& point){
         geometry_msgs::Point msg;
         msg.x = point.x();
         msg.y = point.y();
@@ -73,7 +73,7 @@ namespace DynamicPlanning {
         return msg;
     }
 
-    static geometry_msgs::Twist point3DToTwistMsg(const point_t& point){
+    static geometry_msgs::Twist point3DToTwistMsg(const point3d& point){
         geometry_msgs::Twist msg;
         msg.linear.x = point.x();
         msg.linear.y = point.y();
@@ -81,7 +81,7 @@ namespace DynamicPlanning {
         return msg;
     }
 
-    static geometry_msgs::Quaternion point3DToQuaternionMsg(const point_t& point){
+    static geometry_msgs::Quaternion point3DToQuaternionMsg(const point3d& point){
         geometry_msgs::Quaternion msg;
         msg.x = point.x();
         msg.y = point.y();
@@ -90,8 +90,8 @@ namespace DynamicPlanning {
         return msg;
     }
 
-    static point_t quaternionMsgToPoint3D(const geometry_msgs::Quaternion& msg){
-        return point_t(msg.x, msg.y, msg.z);
+    static point3d quaternionMsgToPoint3D(const geometry_msgs::Quaternion& msg){
+        return point3d(msg.x, msg.y, msg.z);
     }
 
     static geometry_msgs::Quaternion quaternionToQuaternionMsg(const Eigen::Quaterniond& q){
@@ -222,8 +222,8 @@ namespace DynamicPlanning {
         return set.find(element) != set.end();
     }
 
-    static double ellipsoidalDistance(const point_t& p1, const point_t& p2, double downwash){
-        point_t delta = p1 - p2;
+    static double ellipsoidalDistance(const point3d& p1, const point3d& p2, double downwash){
+        point3d delta = p1 - p2;
         delta.z() = delta.z() / downwash;
         return delta.norm();
     }

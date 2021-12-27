@@ -7,6 +7,8 @@ Panels:
         - /Global Options1
         - /Grid1
         - /TF1
+        - /Octomap1
+        - /DesiredTrajs1
         - /StartGoal1
         - /StartGoal1/Namespaces1
         - /CollisionAlert1
@@ -17,6 +19,7 @@ Panels:
         - /MarkerArray1
         - /MarkerArray2
         - /MarkerArray2/Namespaces1
+        - /OccupancyGrid1
       Splitter Ratio: 0.5056179761886597
     Tree Height: 796
   - Class: rviz/Selection
@@ -164,7 +167,7 @@ Visualization Manager:
       Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz/TF
-      Enabled: false
+      Enabled: true
       Frame Timeout: 15
       Frames:
         All Enabled: true
@@ -176,7 +179,7 @@ Visualization Manager:
       Tree:
         {}
       Update Interval: 0
-      Value: false
+      Value: true
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /world_boundary
@@ -190,7 +193,7 @@ Visualization Manager:
       Marker Topic: /occupied_cells_vis_array
       Name: Octomap
       Namespaces:
-        {}
+        map: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -198,7 +201,7 @@ Visualization Manager:
       Marker Topic: /collision_model
       Name: CollisionModel
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -216,12 +219,6 @@ Visualization Manager:
       Namespaces:
         0: true
         1: true
-        10: true
-        11: true
-        12: true
-        13: true
-        14: true
-        15: true
         2: true
         3: true
         4: true
@@ -241,29 +238,13 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /desired_trajs_vis
       Name: DesiredTrajs
       Namespaces:
-        0: true
-        1: true
-        10: true
-        11: true
-        12: true
-        13: true
-        14: true
-        15: true
-        2: true
-        3: true
-        4: true
-        5: true
-        6: true
-        7: true
-        8: true
-        9: true
-        last_point: true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
       Enabled: true
       Marker Topic: /start_goal_points
@@ -300,7 +281,7 @@ Visualization Manager:
       Value: false
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /mav1_collision_constraints_vis
+      Marker Topic: /mav0/collision_constraints_vis
       Name: CollisionConstraint
       Namespaces:
         LSC0: false
@@ -317,7 +298,7 @@ Visualization Manager:
       Value: true
     - Class: rviz/MarkerArray
       Enabled: true
-      Marker Topic: /mav1_grid_path_vis
+      Marker Topic: /mav0/grid_path_vis
       Name: GridPath
       Namespaces:
         "": true
@@ -332,14 +313,25 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /communication_range
       Name: MarkerArray
       Namespaces:
-        communication_range: false
-        trajectory_bound: true
+        {}
       Queue Size: 100
+      Value: false
+    - Class: octomap_rviz_plugin/OccupancyGrid
+      Enabled: true
+      Max. Height Display: 3.4028234663852886e+38
+      Max. Octree Depth: 16
+      Min. Height Display: -3.4028234663852886e+38
+      Name: OccupancyGrid
+      Octomap Topic: /mav1/local_octomap
+      Queue Size: 5
       Value: true
+      Voxel Alpha: 1
+      Voxel Coloring: Z-Axis
+      Voxel Rendering: Occupied Voxels
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -377,11 +369,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 104.66548919677734
+      Scale: 84.59983825683594
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz)
-      X: -0.4652300179004669
-      Y: 0.24181580543518066
+      X: 0
+      Y: 0
     Saved: ~
 Window Geometry:
   Displays:

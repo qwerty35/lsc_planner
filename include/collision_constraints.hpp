@@ -18,13 +18,13 @@ namespace DynamicPlanning {
     class LSC{
     public:
         LSC() = default;
-        LSC(const point_t& obs_control_point,
-            const point_t& normal_vector,
+        LSC(const point3d& obs_control_point,
+            const point3d& normal_vector,
             double d);
         visualization_msgs::Marker convertToMarker(double agent_radius, const std::string& world_frame_id) const;
 
-        point_t obs_control_point;
-        point_t normal_vector;
+        point3d obs_control_point;
+        point3d normal_vector;
         double d = 0;
     };
 
@@ -34,30 +34,30 @@ namespace DynamicPlanning {
     // SFC = {c \in R^3 | box_min < c < box_max}
     class SFC{
     public:
-        point_t box_min;
-        point_t box_max;
+        point3d box_min;
+        point3d box_max;
 
         SFC() = default;
-        SFC(const point_t& box_min, const point_t& box_max);
+        SFC(const point3d& box_min, const point3d& box_max);
 
         [[nodiscard]] LSCs convertToLSCs(int dim) const;
         [[nodiscard]] visualization_msgs::Marker convertToMarker(double agent_radius,
                                                                  const std::string& world_frame_id) const;
 
-        [[nodiscard]] bool isPointInSFC(const point_t& point) const;
+        [[nodiscard]] bool isPointInSFC(const point3d& point) const;
         [[nodiscard]] bool isLineInSFC(const Line& line) const;
-        [[nodiscard]] bool isSFCInBoundary(const point_t& world_min, const point_t& world_max, double margin) const;
+        [[nodiscard]] bool isSFCInBoundary(const point3d& world_min, const point3d& world_max, double margin) const;
         [[nodiscard]] bool isSuperSetOfConvexHull(const points_t& convex_hull) const;
         [[nodiscard]] bool intersectWith(const SFC& other_sfc) const;
 
         [[nodiscard]] SFC unify(const SFC& other_sfc) const;
         [[nodiscard]] SFC intersection(const SFC& other_sfc) const;
 
-        [[nodiscard]] double distanceToPoint(const point_t& point) const;
-        [[nodiscard]] double distanceToInnerPoint(const point_t& point) const;
-        [[nodiscard]] double raycastFromInnerPoint(const point_t& point, const point_t& direction) const;
-        [[nodiscard]] double raycastFromInnerPoint(const point_t& point, const point_t& direction,
-                                                   point_t& surface_direction) const;
+        [[nodiscard]] double distanceToPoint(const point3d& point) const;
+        [[nodiscard]] double distanceToInnerPoint(const point3d& point) const;
+        [[nodiscard]] double raycastFromInnerPoint(const point3d& point, const point3d& direction) const;
+        [[nodiscard]] double raycastFromInnerPoint(const point3d& point, const point3d& direction,
+                                                   point3d& surface_direction) const;
 
         [[nodiscard]] points_t getVertices() const;
         [[nodiscard]] lines_t getEdges() const;
@@ -69,19 +69,20 @@ namespace DynamicPlanning {
 
     class CollisionConstraints {
     public:
-        CollisionConstraints() = default;
+        CollisionConstraints(const Param& param, const Mission& mission);
 
-        void initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr, std::set<int> obs_slack_indices,
-                        const Param& param, const Mission& mission);
-
-        void initializeSFC(const point_t& agent_position, double radius);
+        void initializeSFC(const point3d& agent_position, double radius);
 
         void initializeLSC(size_t N_obs);
 
-        void generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
+        void updateSFCLibrary(const points_t& grid_path, double agent_radius);
+
+        void generateFeasibleSFC(const point3d& last_point, const point3d& current_goal_position,
                                  const points_t& grid_path, double agent_radius);
 
-        SFC findProperSFC(const point_t& start_point, const point_t& goal_point);
+        point3d findProperGoal(const point3d& last_point, const point3d& desired_goal, const points_t& grid_path);
+
+        SFC findProperSFC(const point3d& start_point, const point3d& goal_point);
 
         // Getter
         [[nodiscard]] LSC getLSC(int oi, int m, int i) const;
@@ -93,14 +94,18 @@ namespace DynamicPlanning {
         [[nodiscard]] std::set<int> getSlackIndices() const;
 
         // Setter
+        void setDistmap(std::shared_ptr<DynamicEDTOctomap> distmap_ptr);
+
+        void setObsSlackIndicies(const std::set<int>& obs_slack_indices);
+
         void setLSC(int oi, int m,
                     const points_t& obs_control_points,
-                    const point_t& normal_vector,
+                    const point3d& normal_vector,
                     const std::vector<double>& ds);
 
         void setLSC(int oi, int m,
                     const points_t& obs_control_points,
-                    const point_t& normal_vector,
+                    const point3d& normal_vector,
                     double d);
 
         void setSFC(int m, const SFC& sfc);
@@ -120,7 +125,7 @@ namespace DynamicPlanning {
 
         RSFCs lscs;
         SFCs sfcs;
-        std::set<int> obs_slack_indices;
+        std::set<int> obs_slack_indices; //TODO: not updated yet
         int M = 0, n = 0;
         double dt = 0;
         SFCs sfc_library;
@@ -133,8 +138,7 @@ namespace DynamicPlanning {
         [[nodiscard]] visualization_msgs::MarkerArray convertSFCsToMarkerArrayMsg(const std_msgs::ColorRGBA& color,
                                                                                   double agent_radius) const;
 
-        void updateSFCLibrary(const points_t& grid_path, double agent_radius);
-        SFC expandSFCFromPoint(const point_t& point, double agent_radius);
+        SFC expandSFCFromPoint(const point3d& point, double agent_radius);
         SFC expandSFCFromLine(const Line& line, double agent_radius);
         [[nodiscard]] std::vector<double> initializeBoxFromPoints(const points_t& points) const;
         bool isObstacleInSFC(const SFC& initial_sfc, double margin);

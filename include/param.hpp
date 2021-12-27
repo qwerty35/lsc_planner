@@ -21,21 +21,23 @@ namespace DynamicPlanning{
         bool world_use_octomap;
         double world_resolution;
         double world_z_2d;
+        bool world_use_global_map;
 
         // Multisim setting
-        int multisim_planning_rate;
-        int multisim_qn;
-        double multisim_time_step;
+        bool multisim_experiment;
         bool multisim_patrol;
+        int multisim_qn;
+
+        double multisim_time_step;
+        int multisim_planning_rate;
         double multisim_max_noise;
         int multisim_max_planner_iteration;
+
         bool multisim_save_result;
+        bool multisim_save_mission;
+        double multisim_save_time_step;
         bool multisim_replay;
         std::string multisim_replay_file_name;
-        bool multisim_experiment;
-        double multisim_record_time_step;
-        int multisim_scene_iteration;
-        double multisim_reset_threshold;
 
         // Planner mode
         PlannerMode planner_mode;
@@ -84,6 +86,7 @@ namespace DynamicPlanning{
         double goal_threshold;
         double goal_radius;
         double priority_dist_threshold;
+        double reset_threshold;
 
         // Communication
         double communication_range;

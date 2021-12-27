@@ -1,27 +1,12 @@
 #pragma once
+#include <sp_const.hpp>
 #include <openGJK/openGJK.hpp>
 
 namespace DynamicPlanning{
-//    static bool isPointInStaticObs(point_t p, const dynamic_msgs::Obstacle& obstacle, int dimension){
-//        bool ret = p.x() > (obstacle.pose.position.x - obstacle.dimensions[0]) - SP_EPSILON_FLOAT and
-//                   p.x() < (obstacle.pose.position.x + obstacle.dimensions[0]) + SP_EPSILON_FLOAT and
-//                   p.y() > (obstacle.pose.position.y - obstacle.dimensions[1]) - SP_EPSILON_FLOAT and
-//                   p.y() < (obstacle.pose.position.y + obstacle.dimensions[1]) + SP_EPSILON_FLOAT;
-//
-//        if(dimension == 2){
-//            return ret;
-//        }
-//        else{
-//            return ret and
-//                   p.z() > (obstacle.pose.position.z - obstacle.dimensions[2]) - SP_EPSILON_FLOAT and
-//                   p.z() < (obstacle.pose.position.z + obstacle.dimensions[2]) + SP_EPSILON_FLOAT;
-//        }
-//    }
-
-    static ClosestPoints closestPointsBetweenPointAndLine(const point_t& point,
-                                                          const point_t& line_point,
-                                                          const point_t& line_direction){
-        point_t a, c, line_closest_point;
+    static ClosestPoints closestPointsBetweenPointAndLine(const point3d& point,
+                                                          const point3d& line_point,
+                                                          const point3d& line_direction){
+        point3d a, c, line_closest_point;
         a = line_point - point;
         c = a - line_direction * a.dot(line_direction);
         line_closest_point = point + c;
@@ -34,12 +19,12 @@ namespace DynamicPlanning{
         return closest_points;
     }
 
-    static ClosestPoints closestPointsBetweenPointAndRay(const point_t& point,
-                                                         const point_t& ray_start,
-                                                         const point_t& ray_direction){
+    static ClosestPoints closestPointsBetweenPointAndRay(const point3d& point,
+                                                         const point3d& ray_start,
+                                                         const point3d& ray_direction){
         ClosestPoints closest_points;
 
-        point_t delta_to_start, ray_closest_point;
+        point3d delta_to_start, ray_closest_point;
         delta_to_start = point - ray_start;
         if(delta_to_start.dot(ray_direction) < 0){
             closest_points.dist = delta_to_start.norm();
@@ -54,10 +39,10 @@ namespace DynamicPlanning{
     }
 
     //closest_point: closest point in line
-    static ClosestPoints closestPointsBetweenPointAndLineSegment(const point_t& point,
-                                                                 const point_t& line_start,
-                                                                 const point_t& line_goal){
-        point_t a, b, c, n_line, rel_closest_point;
+    static ClosestPoints closestPointsBetweenPointAndLineSegment(const point3d& point,
+                                                                 const point3d& line_start,
+                                                                 const point3d& line_goal){
+        point3d a, b, c, n_line, rel_closest_point;
         double dist, dist_min;
         a = line_start - point;
         b = line_goal - point;
@@ -93,15 +78,15 @@ namespace DynamicPlanning{
     }
 
 // find min((line1_start + alpha(line1_goal-line1_start) - (line2_start + alpha(line2_goal-line2_start)))
-    static ClosestPoints closestPointsBetweenLinePaths(const point_t& line1_start,
-                                                       const point_t& line1_goal,
-                                                       const point_t& line2_start,
-                                                       const point_t& line2_goal)
+    static ClosestPoints closestPointsBetweenLinePaths(const point3d& line1_start,
+                                                       const point3d& line1_goal,
+                                                       const point3d& line2_start,
+                                                       const point3d& line2_goal)
     {
-        point_t rel_path_start, rel_path_goal, origin;
+        point3d rel_path_start, rel_path_goal, origin;
         rel_path_start = line2_start - line1_start;
         rel_path_goal = line2_goal - line1_goal;
-        origin = point_t(0, 0, 0);
+        origin = point3d(0, 0, 0);
 
         ClosestPoints rel_closest_points, closest_points;
         double alpha, line2_length;
@@ -121,10 +106,10 @@ namespace DynamicPlanning{
     }
 
 //TODO: change line_start, line_goal to line_point, line_direction
-    static ClosestPoints closestPointsBetweenLines(const point_t& line1_start,
-                                                   const point_t& line1_goal,
-                                                   const point_t& line2_start,
-                                                   const point_t& line2_goal)
+    static ClosestPoints closestPointsBetweenLines(const point3d& line1_start,
+                                                   const point3d& line1_goal,
+                                                   const point3d& line2_start,
+                                                   const point3d& line2_goal)
     {
         if(line1_start == line1_goal){
             throw std::invalid_argument("[Geometry] Invalid input for distance between lines, line1 start and goal is same");
@@ -136,7 +121,7 @@ namespace DynamicPlanning{
         ClosestPoints closest_points;
 
         // get closest point of line segment(a->b) from origin
-        point_t n1, n2, n3, delta;
+        point3d n1, n2, n3, delta;
         n1 = (line1_goal - line1_start).normalized();
         n2 = (line2_goal - line2_start).normalized();
         if(n1 == n2 or n1 == -n2){
@@ -169,10 +154,10 @@ namespace DynamicPlanning{
         return closest_points;
     }
 
-    static ClosestPoints closestPointsBetweenLineSegments(const point_t& line1_start,
-                                                          const point_t& line1_goal,
-                                                          const point_t& line2_start,
-                                                          const point_t& line2_goal)
+    static ClosestPoints closestPointsBetweenLineSegments(const point3d& line1_start,
+                                                          const point3d& line1_goal,
+                                                          const point3d& line2_start,
+                                                          const point3d& line2_goal)
     {
         ClosestPoints closest_point, closest_point_cand;
         closest_point.dist = SP_INFINITY;
@@ -209,7 +194,7 @@ namespace DynamicPlanning{
             // skip
         }
         else{
-            point_t n1, n2;
+            point3d n1, n2;
             n1 = (line1_goal - line1_start).normalized();
             n2 = (line2_goal - line2_start).normalized();
             if(n1 == n2 or n1 == -n2){
@@ -254,22 +239,22 @@ namespace DynamicPlanning{
 //        }
 //
 //        // find edges
-//        point_t vertex1, vertex2;
+//        point3d vertex1, vertex2;
 //        for(int i = 0; i < 2; i++){
 //            for(int j = 0; j < 2; j++){
 //                for(int k = 0; k < dimension - 1; k++){
-//                    vertex1 = point_t(x_bound[i], y_bound[j], z_bound[k]);
+//                    vertex1 = point3d(x_bound[i], y_bound[j], z_bound[k]);
 //
 //                    if(i == 0){
-//                        vertex2 = point_t(x_bound[i + 1], y_bound[j], z_bound[k]);
+//                        vertex2 = point3d(x_bound[i + 1], y_bound[j], z_bound[k]);
 //                        edges.emplace_back(Line(vertex1, vertex2));
 //                    }
 //                    if(j == 0){
-//                        vertex2 = point_t(x_bound[i], y_bound[j+1], z_bound[k]);
+//                        vertex2 = point3d(x_bound[i], y_bound[j+1], z_bound[k]);
 //                        edges.emplace_back(Line(vertex1, vertex2));
 //                    }
 //                    if(dimension == 3 and k == 0){
-//                        vertex2 = point_t(x_bound[i+1], y_bound[j], z_bound[k+1]);
+//                        vertex2 = point3d(x_bound[i+1], y_bound[j], z_bound[k+1]);
 //                        edges.emplace_back(Line(vertex1, vertex2));
 //                    }
 //                }
@@ -293,31 +278,31 @@ namespace DynamicPlanning{
 //                   obstacle.pose.position.y + obstacle.dimensions[1]};
 //
 //        // find edges
-//        point_t vertex1, vertex2;
+//        point3d vertex1, vertex2;
 //        for(int i = 0; i < 2; i++){
 //            for(int j = 0; j < 2; j++){
-//                vertex1 = point_t(x_bound[i], y_bound[j], z_2d);
+//                vertex1 = point3d(x_bound[i], y_bound[j], z_2d);
 //
 //                if(i == 0){
-//                    vertex2 = point_t(x_bound[i+1], y_bound[j], z_2d);
+//                    vertex2 = point3d(x_bound[i+1], y_bound[j], z_2d);
 //                    if(j == 0){
-//                        edges.emplace_back(Line(vertex2 + point_t(0, -radius, 0),
-//                                                vertex1 + point_t(0, -radius, 0)));
+//                        edges.emplace_back(Line(vertex2 + point3d(0, -radius, 0),
+//                                                vertex1 + point3d(0, -radius, 0)));
 //                    }
 //                    else{
-//                        edges.emplace_back(Line(vertex1 + point_t(0, radius, 0),
-//                                                vertex2 + point_t(0, radius, 0)));
+//                        edges.emplace_back(Line(vertex1 + point3d(0, radius, 0),
+//                                                vertex2 + point3d(0, radius, 0)));
 //                    }
 //                }
 //                if(j == 0){
-//                    vertex2 = point_t(x_bound[i], y_bound[j+1], z_2d);
+//                    vertex2 = point3d(x_bound[i], y_bound[j+1], z_2d);
 //                    if(i == 0){
-//                        edges.emplace_back(Line(vertex1 + point_t(-radius, 0, 0),
-//                                                vertex2 + point_t(-radius, 0, 0)));
+//                        edges.emplace_back(Line(vertex1 + point3d(-radius, 0, 0),
+//                                                vertex2 + point3d(-radius, 0, 0)));
 //                    }
 //                    else{
-//                        edges.emplace_back(Line(vertex2 + point_t(radius, 0, 0),
-//                                                vertex1 + point_t(radius, 0, 0)));
+//                        edges.emplace_back(Line(vertex2 + point3d(radius, 0, 0),
+//                                                vertex1 + point3d(radius, 0, 0)));
 //                    }
 //                }
 //            }
@@ -326,7 +311,7 @@ namespace DynamicPlanning{
 //        return edges;
 //    }
 
-//    static ClosestPoints closestPointsBetweenPointAndStaticObs(const point_t& point,
+//    static ClosestPoints closestPointsBetweenPointAndStaticObs(const point3d& point,
 //                                                               const dynamic_msgs::Obstacle& obstacle,
 //                                                               int dimension, double z_2d = 1.0)
 //    {
@@ -349,19 +334,19 @@ namespace DynamicPlanning{
 //        ClosestPoints closest_points;
 //        if(dimension == 2){
 //            closest_points.closest_point1 = point;
-//            closest_points.closest_point2 = point_t(x, y, z_2d);
+//            closest_points.closest_point2 = point3d(x, y, z_2d);
 //            closest_points.dist = (closest_points.closest_point2 - closest_points.closest_point1).norm();
 //        }
 //        else{
 //            closest_points.closest_point1 = point;
-//            closest_points.closest_point2 = point_t(x, y, z);
+//            closest_points.closest_point2 = point3d(x, y, z);
 //            closest_points.dist = (closest_points.closest_point2 - closest_points.closest_point1).norm();
 //        }
 //
 //        return closest_points;
 //    }
 
-    static ClosestPoints closestPointsBetweenPointAndConvexHull(const point_t& point,
+    static ClosestPoints closestPointsBetweenPointAndConvexHull(const point3d& point,
                                                                 const points_t& convex_hull){
         /* Squared distance computed by openGJK.                                 */
         double dd;
@@ -387,14 +372,14 @@ namespace DynamicPlanning{
 
         ClosestPoints closest_points;
         closest_points.closest_point1 = point;
-        closest_points.closest_point2 = point + point_t(v[0], v[1], v[2]);
+        closest_points.closest_point2 = point + point3d(v[0], v[1], v[2]);
         closest_points.dist = dd;
 
         return closest_points;
     }
 
-//    static ClosestPoints closestPointsBetweenLineSegmentAndStaticObs(const point_t& start_point,
-//                                                                     const point_t& goal_point,
+//    static ClosestPoints closestPointsBetweenLineSegmentAndStaticObs(const point3d& start_point,
+//                                                                     const point3d& goal_point,
 //                                                                     const dynamic_msgs::Obstacle& obstacle,
 //                                                                     int dimension, double z_2d = 1.0)
 //    {
@@ -436,21 +421,21 @@ namespace DynamicPlanning{
 //        return closest_points;
 //    }
 
-//    static point_t closestPointsBetweenPointAndStaticObs(const dynamic_msgs::Obstacle& obstacle,
-//                                                                  const point_t& point,
+//    static point3d closestPointsBetweenPointAndStaticObs(const dynamic_msgs::Obstacle& obstacle,
+//                                                                  const point3d& point,
 //                                                                  int dimension, double world_z_2d = 1.0)
 //    {
-//        point_t closest_point_in_obs, closest_point_in_line;
+//        point3d closest_point_in_obs, closest_point_in_line;
 //        double dist = distanceBetweenPointAndStaticObs(obstacle, point, closest_point_in_line, dimension, world_z_2d);
 //        return closest_point_in_obs;
 //    }
 
-//    static point_t getClosestPointOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
-//                                                            const point_t& start_point,
-//                                                            const point_t& goal_point,
+//    static point3d getClosestPointOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
+//                                                            const point3d& start_point,
+//                                                            const point3d& goal_point,
 //                                                            int dimension, double world_z_2d = 1.0)
 //    {
-//        point_t closest_point_in_obs, closest_point_in_line;
+//        point3d closest_point_in_obs, closest_point_in_line;
 //        double dist = distanceBetweenLineSegmentAndStaticObs(obstacle, start_point, goal_point,
 //                                                             closest_point_in_obs, closest_point_in_line,
 //                                                             dimension, world_z_2d);
@@ -458,9 +443,9 @@ namespace DynamicPlanning{
 //        return closest_point_in_obs;
 //    }
 
-//    static point_t getClosestVertexOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
-//                                                             const point_t& start_point,
-//                                                             const point_t& goal_point,
+//    static point3d getClosestVertexOnStaticObstacle(const dynamic_msgs::Obstacle& obstacle,
+//                                                             const point3d& start_point,
+//                                                             const point3d& goal_point,
 //                                                             int dimension, double world_z_2d = 1.0)
 //    {
 //        std::array<double, 2> x_bound, y_bound, z_bound;
@@ -476,12 +461,12 @@ namespace DynamicPlanning{
 //                       obstacle.pose.position.z + obstacle.dimensions[2]};
 //        }
 //
-//        point_t vertex, closest_vertex;
+//        point3d vertex, closest_vertex;
 //        double dist, min_dist = SP_INFINITY;
 //        for(int i = 0; i < 2; i++){
 //            for(int j = 0; j < 2; j++){
 //                for(int k = 0; k < dimension - 1; k++){
-//                    vertex = point_t(x_bound[i], y_bound[j], z_bound[k]);
+//                    vertex = point3d(x_bound[i], y_bound[j], z_bound[k]);
 //                    dist = distanceBetweenPointAndLineSegment(start_point, goal_point, vertex);
 //                    if(dist < min_dist){
 //                        min_dist = dist;
@@ -495,7 +480,7 @@ namespace DynamicPlanning{
 //    }
 
 //    static bool checkCollisionBetweenLineSegmentAndBox(const Obstacle& obstacle,
-//                                                       point_t start_point, point_t goal_point,
+//                                                       point3d start_point, point3d goal_point,
 //                                                       double radius, int dimension, double z_2d = 1.0){
 //        if(obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3 ){
 //            throw std::invalid_argument("[Geometry] collision check between line and box failed, Invalid obstacle");
@@ -550,8 +535,8 @@ namespace DynamicPlanning{
 //        return closest_points.dist < radius;
 //    }
 
-    static double computeCollisionTime(const point_t &obs_start, const point_t &obs_goal,
-                                       const point_t &agent_start, const point_t &agent_goal,
+    static double computeCollisionTime(const point3d &obs_start, const point3d &obs_goal,
+                                       const point3d &agent_start, const point3d &agent_goal,
                                        double collision_radius, double time_horizon) {
         //TODO: just solve 2nd poly?
         ClosestPoints closest_points;
@@ -559,7 +544,7 @@ namespace DynamicPlanning{
 
         double dist_in_sphere1, dist_in_sphere2, collision_time = SP_INFINITY;
         if (closest_points.dist <= collision_radius) {
-            point_t a, b, delta;
+            point3d a, b, delta;
             a = agent_start - obs_start;
             b = agent_goal - obs_goal;
             delta = closest_points.closest_point2 - closest_points.closest_point1;
@@ -567,7 +552,7 @@ namespace DynamicPlanning{
             if (a.norm() <= collision_radius) {
                 collision_time = 0;
             } else if (delta == b) {
-                point_t n_line, c;
+                point3d n_line, c;
                 double dist_to_b, dist_to_c;
                 dist_to_b = b.norm();
                 n_line = (b - a).normalized();
@@ -588,7 +573,7 @@ namespace DynamicPlanning{
     }
 
 //    static double computeCollisionTime(const dynamic_msgs::Obstacle &obstacle,
-//                                       const point_t &start_point, const point_t &goal_point,
+//                                       const point3d &start_point, const point3d &goal_point,
 //                                       double collision_radius, double time_horizon, int dimension, double z_2d) {
 //        if (obstacle.type != ObstacleType::STATICOBSTACLE or obstacle.dimensions.size() != 3) {
 //            throw std::invalid_argument("[Geometry] collision check between line and box failed, Invalid obstacle");
@@ -629,30 +614,30 @@ namespace DynamicPlanning{
 //            }
 //        }
 //
-//        point_t closest_point_cand = start_point + (goal_point - start_point) * alpha_min;
+//        point3d closest_point_cand = start_point + (goal_point - start_point) * alpha_min;
 //        ClosestPoints closest_points_to_static_obs = closestPointsBetweenPointAndStaticObs(closest_point_cand,
 //                                                                                           obstacle,
 //                                                                                           dimension, z_2d);
 //
-//        point_t closest_point_obs = closest_points_to_static_obs.closest_point2;
+//        point3d closest_point_obs = closest_points_to_static_obs.closest_point2;
 //        double collision_time = computeCollisionTime(closest_point_obs, closest_point_obs,
 //                                                     start_point, goal_point,
 //                                                     collision_radius, time_horizon);
 //        return collision_time;
 //    }
 
-    static point_t lineDirection(const Line& line){
+    static point3d lineDirection(const Line& line){
         if(line.start_point == line.end_point){
             throw std::invalid_argument("[Geometry] line start and end is the same");
         }
         return (line.end_point - line.start_point).normalized();
     }
 
-    static double safeDistInDirection(const point_t& position, const point_t& direction,
+    static double safeDistInDirection(const point3d& position, const point3d& direction,
                                       const std::vector<dynamic_msgs::Obstacle>& obstacles, double radius,
                                       int dimension, double z_2d) {
         double radius_sum, dist_to_closest_point, safe_dist = SP_INFINITY;
-        point_t obs_position, ray_closest_point;
+        point3d obs_position, ray_closest_point;
         ClosestPoints closest_points;
 //        for (int oi = 0; oi < obstacles.size(); oi++) {
 //            if (obstacles[oi].type == ObstacleType::STATICOBSTACLE) {

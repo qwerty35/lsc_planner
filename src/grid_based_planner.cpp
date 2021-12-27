@@ -50,7 +50,7 @@ namespace DynamicPlanning {
                                        const DynamicPlanning::Param &_param)
                                        : distmap_ptr(_distmap_obj), mission(_mission), param(_param) {}
 
-    points_t GridBasedPlanner::plan(const point_t& current_position, const point_t& goal_position,
+    points_t GridBasedPlanner::plan(const point3d& current_position, const point3d& goal_position,
                                     int agent_id, double agent_radius, double agent_downwash,
                                     const std::vector<Obstacle>& obstacles,
                                     const std::set<int>& high_priority_obstacle_ids)
@@ -64,7 +64,7 @@ namespace DynamicPlanning {
         return plan_result.path;
     }
 
-    void GridBasedPlanner::updateGridInfo(const point_t& current_position, double agent_radius){
+    void GridBasedPlanner::updateGridInfo(const point3d& current_position, double agent_radius){
         double grid_resolution = param.grid_resolution;
         for(int i = 0; i < 3; i++) {
 //            grid_info.grid_min[i] = current_position(i) -
@@ -86,7 +86,7 @@ namespace DynamicPlanning {
         }
     }
 
-    void GridBasedPlanner::updateGridMap(const point_t& current_position,
+    void GridBasedPlanner::updateGridMap(const point3d& current_position,
                                          const std::vector<Obstacle>& obstacles,
                                          double agent_radius,
                                          double agent_downwash,
@@ -109,7 +109,7 @@ namespace DynamicPlanning {
                 for (int j = 0; j < grid_info.dim[1]; j++) {
                     for (int k = 0; k < grid_info.dim[2]; k++) {
                         float dist;
-                        point_t search_point, closest_point;
+                        point3d search_point, closest_point;
                         search_point = gridVectorToPoint3D(GridVector(i, j, k));
                         distmap_ptr->getDistanceAndClosestObstacle(search_point, dist, closest_point);
 
@@ -152,7 +152,7 @@ namespace DynamicPlanning {
                 for (int i = std::max(obs_i - size_xy, 0); i <= std::min(obs_i + size_xy, grid_info.dim[0] - 1); i++) {
                     for (int j = std::max(obs_j - size_xy, 0); j <= std::min(obs_j + size_xy, grid_info.dim[1] - 1); j++) {
                         for (int k = std::max(obs_k - size_z, 0); k <= std::min(obs_k + size_z, grid_info.dim[2] - 1); k++) {
-                            point_t point = gridVectorToPoint3D(GridVector(i, j, k));
+                            point3d point = gridVectorToPoint3D(GridVector(i, j, k));
 
                             dist = ellipsoidalDistance(point, obstacles[oi].position, downwash_total);
                             if (dist < agent_radius + obstacles[oi].radius) {
@@ -168,8 +168,8 @@ namespace DynamicPlanning {
         }
     }
 
-    void GridBasedPlanner::updateGridMission(const point_t& current_position,
-                                             const point_t& goal_position,
+    void GridBasedPlanner::updateGridMission(const point3d& current_position,
+                                             const point3d& goal_position,
                                              int agent_id)
     {
         grid_mission.start_point = point3DToGridVector(current_position);
@@ -204,6 +204,12 @@ namespace DynamicPlanning {
 //                ROS_WARN_STREAM("[GridBasedPlanner] Start point of agent " << std::to_string(agent_id) << " is occluded again");
                 grid_map.setValue(grid_mission.start_point, GP_EMPTY);
             }
+
+        }
+
+        if(isValid(grid_mission.goal_point) and grid_map.getValue(grid_mission.goal_point) == GP_OCCUPIED){
+//                ROS_WARN_STREAM("[GridBasedPlanner] Start point of agent " << std::to_string(agent_id) << " is occluded again");
+            grid_map.setValue(grid_mission.goal_point, GP_EMPTY);
         }
 
         // simple heuristic
@@ -276,23 +282,23 @@ namespace DynamicPlanning {
         return path;
     }
 
-    point_t GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector) const{
+    point3d GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector) const{
         double grid_resolution = param.grid_resolution;
-        return point_t(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
+        return point3d(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
                        grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
                        grid_info.grid_min[2] + grid_vector[2] * grid_resolution);
     }
 
-    point_t GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const{
+    point3d GridBasedPlanner::gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const{
         double grid_resolution = param.grid_resolution;
-        point_t point;
+        point3d point;
         if(dimension == 2) {
-            point = point_t(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
+            point = point3d(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
                                      grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
-                                     param.world_z_2d);
+                            param.world_z_2d);
         }
         else {
-            point = point_t(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
+            point = point3d(grid_info.grid_min[0] + grid_vector[0] * grid_resolution,
                                      grid_info.grid_min[1] + grid_vector[1] * grid_resolution,
                                      grid_info.grid_min[2] + grid_vector[2] * grid_resolution);
         }
@@ -300,7 +306,7 @@ namespace DynamicPlanning {
         return point;
     }
 
-    GridVector GridBasedPlanner::point3DToGridVector(const point_t& point) const{
+    GridVector GridBasedPlanner::point3DToGridVector(const point3d& point) const{
         double grid_resolution = param.grid_resolution;
         return GridVector((int) round((point.x() - grid_info.grid_min[0]) / grid_resolution),
                           (int) round((point.y() - grid_info.grid_min[1]) / grid_resolution),
@@ -321,17 +327,17 @@ namespace DynamicPlanning {
         return free_grid_points;
     }
 
-    point_t GridBasedPlanner::findLOSFreeGoal(const point_t& current_position, const point_t& goal_position,
+    point3d GridBasedPlanner::findLOSFreeGoal(const point3d& current_position, const point3d& goal_position,
                                               double agent_radius) {
-        point_t los_free_goal = current_position;
+        point3d los_free_goal = current_position;
 
         if (distmap_ptr != nullptr) {
             points_t path = plan_result.path;
             path.emplace_back(goal_position);
 
             for (const auto &point : path) {
-//                bool is_safe = castRay(current_position, point, agent_radius + 0.5 * param.world_resolution); // add 0.5 * param.grid_resolution to avoid numerical error.
-                bool is_safe = castRay(current_position, point, agent_radius);
+                bool is_safe = castRay(current_position, point, agent_radius + 0.5 * param.world_resolution); // add 0.5 * param.grid_resolution to avoid numerical error.
+//                bool is_safe = castRay(current_position, point, agent_radius);
 
                 if (is_safe) {
                     los_free_goal = point;
@@ -352,8 +358,8 @@ namespace DynamicPlanning {
         return los_free_goal;
     }
 
-    bool GridBasedPlanner::castRay(const point_t& current_position,
-                                   const point_t& goal_position,
+    bool GridBasedPlanner::castRay(const point3d& current_position,
+                                   const point3d& goal_position,
                                    double agent_radius)
     {
         double safe_dist_curr, safe_dist_goal, dist_to_goal, dist_threshold;
@@ -365,7 +371,7 @@ namespace DynamicPlanning {
 //        safe_dist_goal = distmap_ptr->getDistance(goal_position);
 
         float dist;
-        point_t closest_point;
+        point3d closest_point;
         distmap_ptr->getDistanceAndClosestObstacle(current_position, dist, closest_point);
         safe_dist_curr = current_position.distance(closest_point);
 
@@ -382,7 +388,7 @@ namespace DynamicPlanning {
             return true;
         }
 
-        point_t mid_position = (current_position + goal_position) * 0.5;
+        point3d mid_position = (current_position + goal_position) * 0.5;
         return castRay(current_position, mid_position, agent_radius)
                && castRay(mid_position, goal_position, agent_radius);
     }

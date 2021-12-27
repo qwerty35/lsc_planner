@@ -2,8 +2,6 @@ cmake_minimum_required(VERSION 2.8.3)
 project(lsc_planner)
 
 set(CMAKE_CXX_STANDARD 17)
-#set(CMAKE_BUILD_TYPE Debug)
-set(CMAKE_BUILD_TYPE Release)
 include_directories(${PROJECT_SOURCE_DIR}/include)
 
 #BOOST14
@@ -18,6 +16,12 @@ find_package(octomap REQUIRED)
 include_directories(${OCTOMAP_INCLUDE_DIRS})
 link_libraries(${OCTOMAP_LIBRARIES})
 add_definitions(-DOCTOMAP_NODEBUGOUT)
+
+#PCL
+find_package(PCL 1.3 REQUIRED COMPONENTS common io)
+include_directories(${PCL_INCLUDE_DIRS})
+link_directories(${PCL_LIBRARY_DIRS})
+add_definitions(${PCL_DEFINITIONS})
 
 #EDT
 find_package(dynamicEDT3D REQUIRED)
@@ -50,17 +54,19 @@ find_package(catkin REQUIRED COMPONENTS
   rosbag
   std_msgs
   nav_msgs
+  sensor_msgs
   geometry_msgs
   octomap_ros
   octomap_msgs
   dynamic_msgs
+  pcl_ros
 )
 include_directories(
   ${catkin_INCLUDE_DIRS}
 )
 catkin_package(
   INCLUDE_DIRS include
-  CATKIN_DEPENDS roscpp roslib message_runtime octomap_ros octomap_msgs
+  CATKIN_DEPENDS roscpp roslib message_runtime octomap_ros octomap_msgs pcl_ros
   DEPENDS OCTOMAP
 )
 
@@ -100,12 +106,14 @@ set(OPENGJK_SRC
 
 #LSC planner
 set(LSC_PLANNER_SRC
-  src/traj_planner.cpp
-  src/traj_optimizer.cpp
   src/param.cpp
   src/mission.cpp
-  src/collision_constraints.cpp
+  src/agent_manager.cpp
+  src/traj_planner.cpp
+  src/traj_optimizer.cpp
   src/grid_based_planner.cpp
+  src/collision_constraints.cpp
+  src/map_manager.cpp
   ${RVO2_2D_SRC}
   ${RVO2_3D_SRC}
   ${Astar_3D_SRC}
@@ -126,6 +134,7 @@ target_link_libraries(multi_sync_simulator_node
   ${catkin_LIBRARIES}
   ${OCTOMAP_LIBRARIES}
   ${CPLEX_LIBRARIES}
+  ${PCL_LIBRARIES}
   stdc++fs
 )
 
@@ -139,12 +148,12 @@ target_link_libraries(cmd_publisher_node
   ${catkin_LIBRARIES}
 )
 
-add_executable(multi_sync_debugger_node
-  src/multi_sync_debugger_node.cpp
-  src/collision_constraints.cpp
-  ${OPENGJK_SRC}
-)
-add_dependencies(multi_sync_debugger_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(multi_sync_debugger_node
-  ${catkin_LIBRARIES}
-)
+#add_executable(multi_sync_debugger_node
+#  src/multi_sync_debugger_node.cpp
+#  src/collision_constraints.cpp
+#  ${OPENGJK_SRC}
+#)
+#add_dependencies(multi_sync_debugger_node ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(multi_sync_debugger_node
+#  ${catkin_LIBRARIES}
+#)

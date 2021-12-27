@@ -13,6 +13,7 @@ namespace DynamicPlanning {
         nh.param<bool>("world/use_octomap", world_use_octomap, false);
         nh.param<double>("world/resolution", world_resolution, 0.1);
         nh.param<double>("world/z_2d", world_z_2d, 1.0);
+        nh.param<bool>("world/use_global_map", world_use_global_map, true);
 
         // Multisim setting
         nh.param<int>("multisim/planning_rate", multisim_planning_rate, -1);
@@ -22,11 +23,12 @@ namespace DynamicPlanning {
         nh.param<double>("multisim/max_noise", multisim_max_noise, 0.0);
         nh.param<int>("multisim/max_planner_iteration", multisim_max_planner_iteration, 1000);
         nh.param<bool>("multisim/save_result", multisim_save_result, false);
+        nh.param<bool>("multisim/save_mission", multisim_save_mission, false);
         nh.param<bool>("multisim/replay", multisim_replay, false);
         nh.param<std::string>("multisim/replay_file_name", multisim_replay_file_name, "default.csv");
         nh.param<bool>("multisim/experiment", multisim_experiment, false);
-        nh.param<double>("multisim/record_time_step", multisim_record_time_step, 0.1);
-        nh.param<double>("multisim/reset_threshold", multisim_reset_threshold, 0.1);
+        nh.param<double>("multisim/record_time_step", multisim_save_time_step, 0.1);
+        nh.param<double>("multisim/reset_threshold", reset_threshold, 0.1);
 
         // Planner mode
         std::string planner_mode_str;
@@ -62,6 +64,9 @@ namespace DynamicPlanning {
         else if(goal_mode_str == "prior_based3"){
             goal_mode = GoalMode::PRIORBASED3;
         }
+        else if(goal_mode_str == "entropy"){
+            goal_mode = GoalMode::ENTROPY;
+        }
 
         // Obstacle prediction
         nh.param<bool>("obs/size_prediction", obs_size_prediction, true);
@@ -80,6 +85,9 @@ namespace DynamicPlanning {
         nh.param<double>("opt/terminal_weight", terminal_weight, 1);
         nh.param<double>("opt/slack_collision_weight", slack_collision_weight, 1);
         nh.param<int>("opt/N_constraint_segments", N_constraint_segments, -1);
+        if (N_constraint_segments < 0) {
+            N_constraint_segments = M;
+        }
 
         // Deadlock
         nh.param<double>("deadlock/velocity_threshold", deadlock_velocity_threshold, 0.1);
@@ -114,7 +122,6 @@ namespace DynamicPlanning {
         package_path = ros::package::getPath("lsc_planner");
 
         if(mission_file_name.find(".json") != std::string::npos){
-            multisim_scene_iteration = 1;
             mission_file_names.emplace_back(package_path + "/missions/" + mission_file_name);
         }
         else{
@@ -176,7 +183,7 @@ namespace DynamicPlanning {
     }
 
     std::string Param::getGoalModeStr() const{
-        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based", "prior_based2", "prior_based3"};
+        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based", "prior_based2", "prior_based3", "entropy"};
         return planner_mode_strs[static_cast<int>(goal_mode)];
     }
 }

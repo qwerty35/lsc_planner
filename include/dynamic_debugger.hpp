@@ -301,7 +301,7 @@ private:
             // collision model
             double t = std::min(current_time, M * dt);
             dynamic_msgs::State state = getStateFromControlPoints(traj, t, M, n, dt);
-            point_t position = pointMsgToPoint3d(state.pose.position);
+            point3d position = pointMsgToPoint3d(state.pose.position);
             msg_traj_vis.markers.emplace_back(convertCollisionModelToMarker(position, agent_radius, id, use_colormap));
         }
 
@@ -345,11 +345,11 @@ private:
             for (int i = 0; i < n + 1; i++) {
                 obs_control_points[i] = pointMsgToPoint3d(msg_collision_constraints.rsfcs[oi].obs_control_points[m * (n + 1) + i]);
             }
-            point_t obs_position = getPointFromControlPoints(obs_control_points, t_normalized);
+            point3d obs_position = getPointFromControlPoints(obs_control_points, t_normalized);
 
             // normal vector
             // use minus normal vector for showing collision region
-            point_t normal_vector = -pointMsgToPoint3d(msg_collision_constraints.rsfcs[oi].normal_vector[m * (n + 1)]);
+            point3d normal_vector = -pointMsgToPoint3d(msg_collision_constraints.rsfcs[oi].normal_vector[m * (n + 1)]);
 
             // safe distance
             std::vector<double> d;
@@ -392,7 +392,7 @@ private:
         return msg_rsfc_vis;
     }
 
-    visualization_msgs::Marker convertCollisionModelToMarker(point_t position, double size, int id, bool use_colormap = true){
+    visualization_msgs::Marker convertCollisionModelToMarker(point3d position, double size, int id, bool use_colormap = true){
         visualization_msgs::Marker marker;
         marker.header.frame_id = frame_id;
         marker.type = visualization_msgs::Marker::SPHERE;
@@ -431,8 +431,8 @@ private:
         }
 
         //Parsing message
-        point_t box_min = pointMsgToPoint3d(msg_collision_constraints.sfcs[m].box_min);
-        point_t box_max = pointMsgToPoint3d(msg_collision_constraints.sfcs[m].box_max);
+        point3d box_min = pointMsgToPoint3d(msg_collision_constraints.sfcs[m].box_min);
+        point3d box_max = pointMsgToPoint3d(msg_collision_constraints.sfcs[m].box_max);
         SFC box(box_min, box_max);
 
         visualization_msgs::Marker marker = box.convertToMarker(agent_radius, "world");

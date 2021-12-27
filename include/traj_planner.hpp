@@ -19,6 +19,7 @@
 #include <dynamic_msgs/TrajectoryArray.h>
 #include <dynamic_msgs/CollisionConstraint.h>
 #include <dynamic_msgs/PlanningReport.h>
+#include <sensor_msgs/PointCloud2.h>
 
 // Safe Corridor
 #include <collision_constraints.hpp>
@@ -47,56 +48,28 @@
 namespace DynamicPlanning {
     class TrajPlanner {
     public:
-        TrajPlanner(int _agent_id, const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission,
-                    const std::shared_ptr<DynamicEDTOctomap>& _distmap_ptr);
+        TrajPlanner(const ros::NodeHandle& nh, const Param& param, const Mission& mission, int agent_id);
 
-        PlanningReport plan(ros::Time _sim_current_time);
+        traj_t plan(const Agent& agent,
+                    const std::shared_ptr<octomap::OcTree>& octree_ptr,
+                    const std::shared_ptr<DynamicEDTOctomap>& distmap_ptr,
+                    ros::Time sim_current_time);
 
         void publish();
 
-        void reset(const dynamic_msgs::State& msg_current_state);
+//        void reset(const dynamic_msgs::State& msg_current_state);
 
         // Setter
-        void setCurrentState(const dynamic_msgs::State& msg_current_state);
-
-        void setDistMap(const std::shared_ptr<DynamicEDTOctomap>& distmap_ptr);
-
-        void setObstacles(const dynamic_msgs::ObstacleArray& msg_dynamic_obstacles);
-
-        void setObsPrevTrajs(const std::vector<traj_t>& obs_prev_trajs);
-
-        void setPlannerState(const PlannerState& new_planner_state);
-
-        void setStartPosition(const point_t& new_start_position);
-
-        void setDesiredGoal(const point_t& new_desired_goal);
+        void setObstacles(const dynamic_msgs::ObstacleArray &msg_obstacles);
 
         // Getter
-        [[nodiscard]] point_t getCurrentPosition() const;
+        [[nodiscard]] point3d getCurrentGoalPosition() const;
 
-        [[nodiscard]] dynamic_msgs::State getCurrentStateMsg() const;
+        [[nodiscard]] point3d getAgentORCAVelocity() const;
 
-        [[nodiscard]] dynamic_msgs::State getFutureStateMsg(double future_time) const;
+        [[nodiscard]] point3d getObsORCAVelocity(int oi) const;
 
-        [[nodiscard]] point_t getAgentORCAVelocity() const;
-
-        [[nodiscard]] point_t getObsORCAVelocity(int oi) const;
-
-        [[nodiscard]] PlanningTimeStatistics getPlanningTime() const;
-
-        [[nodiscard]] double getTrajCost() const;
-
-        [[nodiscard]] PlanningReport getPlanningReport() const;
-
-        [[nodiscard]] traj_t getTraj() const;
-
-        [[nodiscard]] vector_t getNormalVector(int obs_id, int m) const;
-
-        [[nodiscard]] point_t getCurrentGoalPosition() const;
-
-        [[nodiscard]] point_t getDesiredGoalPosition() const;
-
-        [[nodiscard]] int getPlannerSeq() const;
+        [[nodiscard]] PlanningStatistics getPlanningStatistics() const;
 
     private:
         Param param;
@@ -113,36 +86,32 @@ namespace DynamicPlanning {
         ros::Publisher pub_grid_path;
         ros::Time sim_current_time;
 
-        // Flags, state
-        FlagMsg flag_current_state, flag_obstacles;
-        bool flag_initialize_sfc;
-        PlannerState planner_state;
-        int prior_obs_id;
-
-        // Agent
+        // Agent state, report
         Agent agent;
-
-        // Report
-        PlanningReport planning_report;
-        PlanningTimeStatistics planning_time;
-        double traj_cost;
         int planner_seq;
+        PlanningStatistics statistics;
+        bool initialize_sfc;
+
 
         // Frequently used constants
-        int M, n, phi, dim;
+        int M, n;
         Eigen::MatrixXd B, B_inv;
 
         // Trajectories
         traj_t initial_traj; // [segment_idx][control_pts_idx], initial trajectory
-        traj_t desired_traj; // [segment_idx][control_pts_idx], desired trajectory
+        traj_t prev_traj; // [segment_idx][control_pts_idx], previous trajectory
 
         // Obstacle
-        std::shared_ptr<DynamicEDTOctomap> distmap_ptr; // octomap
+        std::shared_ptr<octomap::OcTree> octree_ptr; // octomap
+        std::shared_ptr<DynamicEDTOctomap> distmap_ptr; // Euclidean distance field map
         std::vector<Obstacle> obstacles; // [obs_idx], obstacles
         std::vector<traj_t> obs_pred_trajs; // [obs_idx][segment_idx][control_pts_idx], predicted trajectory of obstacles
-        std::vector<traj_t> obs_prev_trajs; // [obs_idx][segment_idx][control_pts_idx], trajectory of obstacles planned at the previous step
         std::vector<std::vector<std::vector<double>>> obs_pred_sizes; // [obs_idx][segment_idx][control_pts_idx], predicted obstacle size
         std::set<int> obs_slack_indices; // set of obstacle indices that need to adjust slack variable, needed for dealing with external disturbance
+
+        // Goal planning
+        points_t grid_path;
+        int prior_obs_id;
 
         // Collision constraints
         CollisionConstraints constraints;
@@ -158,16 +127,13 @@ namespace DynamicPlanning {
         std::unique_ptr<RVO3D::RVOSimulator> rvo_simulator_3d;
         points_t orca_velocities;
 
-        // Grid based planner
-        points_t grid_path;
-
         // ROS
-        void initializeROS();
+        void initializeROS(int agent_id);
 
         // Planner module
-        void planImpl();
-        void planORCA();
-        void planLSC();
+        traj_t planImpl();
+        traj_t planORCA();
+        traj_t planLSC();
 
         // Functions for checking agent state
         void checkPlannerMode(); // Check modes in launch file are valid, and fix them automatically
@@ -181,6 +147,7 @@ namespace DynamicPlanning {
         void goalPlanningWithPriority();
         void goalPlanningWithPriority2();
         void goalPlanningWithPriority3();
+        void goalPlanningWithEntropy();
 
         // Obstacle prediction
         void obstaclePrediction();
@@ -217,15 +184,15 @@ namespace DynamicPlanning {
         void generateBVC();
         void generateSFC();
 
-        static point_t normalVector(const point_t& obs_start, const point_t& obs_goal,
-                                      const point_t& agent_start, const point_t& agent_goal,
-                                      double& closest_dist);
+        static point3d normalVector(const point3d& obs_start, const point3d& obs_goal,
+                                    const point3d& agent_start, const point3d& agent_goal,
+                                    double& closest_dist);
 
-        static point_t normalVectorBetweenPolys(const points_t& control_points_agent,
-                                                  const points_t& control_points_obs);
+        static point3d normalVectorBetweenPolys(const points_t& control_points_agent,
+                                                const points_t& control_points_obs);
 
         // Trajectory Optimization
-        bool trajOptimization();
+        traj_t trajOptimization();
 
         // Publish
         void publishCollisionConstraints();
@@ -238,13 +205,15 @@ namespace DynamicPlanning {
         [[nodiscard]] double distanceToGoalByObsId(int obs_id) const;
         [[nodiscard]] double distanceToGoalByObsIdx(int obs_idx) const;
 
-        double computeCollisionTimeToDistmap(const point_t& start_position,
-                                             const point_t& goal_position,
+        double computeCollisionTimeToDistmap(const point3d& start_position,
+                                             const point3d& goal_position,
                                              double agent_radius,
                                              double time_horizon);
 
         double computeMinCollisionTime();
 
-        point_t findProperGoalByDirection(const point_t& start, const vector_t& direction, double dist_keep);
+        point3d findProperGoalByDirection(const point3d& start, const vector3d& direction, double dist_keep);
+
+        double computeEntropy(const point3d& search_point);
     };
 }

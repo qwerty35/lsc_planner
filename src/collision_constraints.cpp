@@ -1,8 +1,8 @@
 #include <collision_constraints.hpp>
 
 namespace DynamicPlanning{
-    LSC::LSC(const point_t& _obs_control_point,
-             const point_t& _normal_vector,
+    LSC::LSC(const point3d& _obs_control_point,
+             const point3d& _normal_vector,
              double _d)
             : obs_control_point(_obs_control_point), normal_vector(_normal_vector), d(_d) {}
 
@@ -29,14 +29,14 @@ namespace DynamicPlanning{
     }
 
 
-    SFC::SFC(const point_t& _box_min, const point_t& _box_max){
+    SFC::SFC(const point3d& _box_min, const point3d& _box_max){
         box_min = _box_min;
         box_max = _box_max;
     }
 
     LSCs SFC::convertToLSCs(int dim) const{
-        point_t normal_vector_min, normal_vector_max;
-        point_t zero_point = point_t(0, 0, 0);
+        point3d normal_vector_min, normal_vector_max;
+        point3d zero_point = point3d(0, 0, 0);
         double d_min, d_max;
 
         std::vector<LSC> lscs;
@@ -67,7 +67,7 @@ namespace DynamicPlanning{
         msg_marker.pose.orientation = defaultQuaternion();
         msg_marker.scale.x = 0.03;
 
-        point_t inflation_vector(agent_radius, agent_radius, agent_radius);
+        point3d inflation_vector(agent_radius, agent_radius, agent_radius);
         SFC inflated_box = SFC(box_min - inflation_vector, box_max + inflation_vector);
         lines_t edges = inflated_box.getEdges();
         for(const auto& edge : edges){
@@ -78,7 +78,7 @@ namespace DynamicPlanning{
         return msg_marker;
     }
 
-    bool SFC::isPointInSFC(const point_t& point) const{
+    bool SFC::isPointInSFC(const point3d& point) const{
         return point.x() > box_min.x() - SP_EPSILON_FLOAT &&
                point.y() > box_min.y() - SP_EPSILON_FLOAT &&
                point.z() > box_min.z() - SP_EPSILON_FLOAT &&
@@ -91,7 +91,7 @@ namespace DynamicPlanning{
         return isPointInSFC(line.start_point) && isPointInSFC(line.end_point);
     }
 
-    bool SFC::isSFCInBoundary(const point_t& world_min, const point_t& world_max,
+    bool SFC::isSFCInBoundary(const point3d& world_min, const point3d& world_max,
                               double margin) const {
         return box_min.x() > world_min.x() + margin - SP_EPSILON &&
                box_min.y() > world_min.y() + margin - SP_EPSILON &&
@@ -146,12 +146,12 @@ namespace DynamicPlanning{
         return inter_box;
     }
 
-    double SFC::distanceToPoint(const point_t& point) const{
+    double SFC::distanceToPoint(const point3d& point) const{
         if(isPointInSFC(point)){
-            return -1;
+            return 0;
         }
 
-        point_t closest_point = point;
+        point3d closest_point = point;
         for(int i = 0; i < 3; i++){
             if(point(i) < box_min(i)){
                 closest_point(i) = box_min(i);
@@ -164,7 +164,7 @@ namespace DynamicPlanning{
         return (point - closest_point).norm();
     }
 
-    double SFC::distanceToInnerPoint(const point_t& point) const{
+    double SFC::distanceToInnerPoint(const point3d& point) const{
         if(not isPointInSFC(point)){
             return -1;
         }
@@ -185,19 +185,19 @@ namespace DynamicPlanning{
         return min_dist;
     }
 
-    double SFC::raycastFromInnerPoint(const point_t& inner_point, const point_t& direction) const{
-        point_t surface_direction;
+    double SFC::raycastFromInnerPoint(const point3d& inner_point, const point3d& direction) const{
+        point3d surface_direction;
         return raycastFromInnerPoint(inner_point, direction, surface_direction);
     }
 
-    double SFC::raycastFromInnerPoint(const point_t& inner_point, const point_t& direction, point_t& surface_direction) const{
+    double SFC::raycastFromInnerPoint(const point3d& inner_point, const point3d& direction, point3d& surface_direction) const{
         if(not isPointInSFC(inner_point)){
             return -1;
         }
 
         double a, b, k, min_dist = SP_INFINITY;
         for(int i = 0; i < 3; i++){
-            point_t n_surface;
+            point3d n_surface;
             n_surface(i) = 1;
             a = (box_min - inner_point).dot(n_surface);
             b = direction.dot(n_surface);
@@ -213,7 +213,7 @@ namespace DynamicPlanning{
         }
 
         for(int i = 0; i < 3; i++){
-            point_t n_surface;
+            point3d n_surface;
             n_surface(i) = -1;
             a = (box_max - inner_point).dot(n_surface);
             b = direction.dot(n_surface);
@@ -236,8 +236,8 @@ namespace DynamicPlanning{
         vertices.emplace_back(box_min);
         vertices.emplace_back(box_max);
         for(int i = 0; i < 3; i++){
-            point_t point1 = box_min;
-            point_t point2 = box_max;
+            point3d point1 = box_min;
+            point3d point2 = box_max;
             point1(i) = box_max(i);
             point2(i) = box_min(i);
             vertices.emplace_back(point1);
@@ -251,7 +251,7 @@ namespace DynamicPlanning{
         lines_t edges;
 
         // find edges
-        point_t vertex1, vertex2, vertex3;
+        point3d vertex1, vertex2, vertex3;
 
         vertex1 = box_min;
         for(int i = 0; i < 3; i++){
@@ -277,24 +277,20 @@ namespace DynamicPlanning{
         return edges;
     }
 
-    void CollisionConstraints::initialize(std::shared_ptr<DynamicEDTOctomap> distmap_ptr_,
-                                          std::set<int> obs_slack_indices_,
-                                          const Param& param_, const Mission& mission_){
-        distmap_ptr = distmap_ptr_;
+    CollisionConstraints::CollisionConstraints(const Param& param_, const Mission& mission_) {
         param = param_;
         mission = mission_;
 
         M = param.M;
         n = param.n;
         dt = param.dt;
-        obs_slack_indices = std::move(obs_slack_indices_);
 
         //SFC
         sfcs.resize(M);
         sfc_library.clear();
     }
 
-    void CollisionConstraints::initializeSFC(const point_t& agent_position, double radius) {
+    void CollisionConstraints::initializeSFC(const point3d& agent_position, double radius) {
         SFC sfc = expandSFCFromPoint(agent_position, radius);
         for(int m = 0; m < M; m++){
             sfcs[m] = sfc;
@@ -332,7 +328,7 @@ namespace DynamicPlanning{
         }
     }
 
-    void CollisionConstraints::generateFeasibleSFC(const point_t& last_point, const point_t& current_goal_position,
+    void CollisionConstraints::generateFeasibleSFC(const point3d& last_point, const point3d& current_goal_position,
                                                    const points_t& grid_path, double agent_radius){
         // update sfc library
         updateSFCLibrary(grid_path, agent_radius);
@@ -342,7 +338,7 @@ namespace DynamicPlanning{
             sfcs[m] = sfcs[m + 1];
         }
 
-        // Find last point is in sfc_library
+//        // Find last point is in sfc_library
         SFC sfc_update;
         double min_dist_to_goal = SP_INFINITY;
         for(const auto& sfc : sfc_library){
@@ -362,9 +358,10 @@ namespace DynamicPlanning{
         }
 
         if(min_dist_to_goal == SP_INFINITY){
-            ROS_WARN("[CollisionConstraints] Cannot find proper SFC in sfc_library, try naive method0");
+            ROS_WARN("[CollisionConstraints] Cannot find proper SFC in sfc_library, try naive method");
             try{
                 sfc_update = expandSFCFromPoint(last_point, agent_radius);
+                sfc_library.emplace_back(sfc_update);
             }
             catch(...){ //TODO: define error
                 ROS_WARN("[CollisionConstraints] Cannot find proper SFC, use previous one");
@@ -375,7 +372,29 @@ namespace DynamicPlanning{
         sfcs[M - 1] = sfc_update;
     }
 
-    SFC CollisionConstraints::findProperSFC(const point_t& start_point, const point_t& goal_point){
+    point3d CollisionConstraints::findProperGoal(const point3d& last_point,
+                                                 const point3d& desired_goal,
+                                                 const points_t& grid_path){
+        if(grid_path.empty()){
+            //TODO: do something
+            return desired_goal;
+        }
+
+        point3d proper_goal;
+        for(const auto& grid_point : grid_path){
+            for(const auto& sfc : sfc_library){
+                if(!sfc.isPointInSFC(last_point) or !sfc.isPointInSFC(grid_point)){
+                    continue;
+                }
+
+                proper_goal = grid_point;
+            }
+        }
+
+        return proper_goal;
+    }
+
+    SFC CollisionConstraints::findProperSFC(const point3d& start_point, const point3d& goal_point){
         SFC proper_sfc, sfc_cand;
         bool find_proper_sfc = false;
         double min_dist = SP_INFINITY;
@@ -431,9 +450,17 @@ namespace DynamicPlanning{
         return obs_slack_indices;
     }
 
+    void CollisionConstraints::setDistmap(std::shared_ptr<DynamicEDTOctomap> distmap_ptr_){
+        distmap_ptr = distmap_ptr_;
+    }
+
+    void CollisionConstraints::setObsSlackIndicies(const std::set<int>& obs_slack_indices_){
+        obs_slack_indices = obs_slack_indices_;
+    }
+
     void CollisionConstraints::setLSC(int oi, int m,
                                       const points_t& obs_control_points,
-                                      const vector_t& normal_vector,
+                                      const vector3d& normal_vector,
                                       const std::vector<double>& ds) {
         for(int i = 0; i < n + 1; i++){
             lscs[oi][m][i] = LSC(obs_control_points[i], normal_vector, ds[i]);
@@ -442,7 +469,7 @@ namespace DynamicPlanning{
 
     void CollisionConstraints::setLSC(int oi, int m,
                                       const points_t& obs_control_points,
-                                      const vector_t& normal_vector,
+                                      const vector3d& normal_vector,
                                       double d) {
         for(int i = 0; i < n + 1; i++){
             lscs[oi][m][i] = LSC(obs_control_points[i], normal_vector, d);
@@ -571,7 +598,7 @@ namespace DynamicPlanning{
         return msg_collision_constraint;
     }
 
-    SFC CollisionConstraints::expandSFCFromPoint(const point_t& point, double agent_radius) {
+    SFC CollisionConstraints::expandSFCFromPoint(const point3d& point, double agent_radius) {
         // Initialize initial_box
         SFC initial_sfc;
 
@@ -637,7 +664,7 @@ namespace DynamicPlanning{
             sfc_size[i] = (int)round((sfc.box_max(i) - sfc.box_min(i)) / param.world_resolution) + 1;
         }
 
-        point_t delta;
+        point3d delta;
         std::array<size_t, 3> iter = {0, 0, 0};
 //        for (iter[0] = 0; iter[0] < std::max(sfc_size[0], 2); iter[0]++) {
 //            for (iter[1] = 0; iter[1] < std::max(sfc_size[1], 2); iter[1]++) {
@@ -646,7 +673,7 @@ namespace DynamicPlanning{
             for (iter[1] = 0; iter[1] < sfc_size[1]; iter[1]++) {
                 for (iter[2] = 0; iter[2] < sfc_size[2]; iter[2]++) {
                     float dist;
-                    point_t search_point, closest_point;
+                    point3d search_point, closest_point;
                     for(int i = 0; i < 3; i++){
                         search_point(i) = sfc.box_min(i) + iter[i] * param.world_resolution;
                     }

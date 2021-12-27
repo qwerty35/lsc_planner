@@ -1,8 +1,9 @@
 #include <multi_sync_simulator.hpp>
+#include <utility>
 
 namespace DynamicPlanning{
-    MultiSyncSimulator::MultiSyncSimulator(const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission)
-            : nh(_nh), param(_param), mission(_mission), obstacle_generator(ObstacleGenerator(_nh, _mission))
+    MultiSyncSimulator::MultiSyncSimulator(const ros::NodeHandle& _nh, Param _param, Mission _mission)
+            : nh(_nh), param(std::move(_param)), mission(std::move(_mission))
     {
         pub_agent_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/agent_trajectories_history", 1);
         pub_obstacle_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_trajectories_history", 1);
@@ -16,14 +17,14 @@ namespace DynamicPlanning{
         pub_agent_vel_limits = nh.advertise<std_msgs::Float64MultiArray>("/agent_vel_limits", 1);
         pub_agent_acc_limits = nh.advertise<std_msgs::Float64MultiArray>("/agent_acc_limits", 1);
         pub_start_goal_points_vis = nh.advertise<visualization_msgs::MarkerArray>("/start_goal_points", 1);
-        pub_goal_positions_raw = nh.advertise<dynamic_msgs::GoalArray>("/goal_positions_raw", 1);
+//        pub_goal_positions_raw = nh.advertise<dynamic_msgs::GoalArray>("/goal_positions_raw", 1);
         pub_world_boundary = nh.advertise<visualization_msgs::MarkerArray>("/world_boundary", 1);
         pub_collision_alert = nh.advertise<visualization_msgs::MarkerArray>("/collision_alert", 1);
-        pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
+//        pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
         pub_desired_trajs_vis = nh.advertise<visualization_msgs::MarkerArray>("/desired_trajs_vis", 1);
         pub_grid_map = nh.advertise<visualization_msgs::MarkerArray>("/grid_map", 1);
         pub_communication_range = nh.advertise<visualization_msgs::MarkerArray>("/communication_range", 1);
-//        sub_octomap = nh.subscribe( "/octomap_full", 1, &MultiSyncSimulator::octomapCallback, this);
+        sub_global_map = nh.subscribe( "/octomap_point_cloud_centers", 1, &MultiSyncSimulator::globalMapCallback, this);
         service_start_planning = nh.advertiseService("/start_planning", &MultiSyncSimulator::startPlanningCallback, this);
         service_start_patrol = nh.advertiseService("/start_patrol", &MultiSyncSimulator::startPatrolCallback, this);
         service_stop_patrol = nh.advertiseService("/stop_patrol", &MultiSyncSimulator::stopPatrolCallback, this);
@@ -36,22 +37,23 @@ namespace DynamicPlanning{
 
         sim_start_time = ros::Time::now();
         sim_current_time = sim_start_time;
+        obstacle_generator.initialize(nh, mission);
         obstacle_generator.update(0, 0);
 
         is_collided = false;
-        has_distmap = false;
+        has_global_map = false;
         initial_update = true;
         mission_changed = true;
         safety_ratio_agent = SP_INFINITY;
         safety_ratio_obs = SP_INFINITY;
         total_flight_time = SP_INFINITY;
         total_distance = 0;
-        N_average = 0;
-        total_distance = 0;
 
         file_name_time = std::to_string(sim_start_time.toSec());
         file_name_param = param.getPlannerModeStr() + "_" + std::to_string(mission.qn) + "agents";
-//        mission.saveMission(param.package_path + "/missions/previous_missions/mission_" + file_name_time + ".json");
+        if(param.multisim_save_mission){
+            mission.saveMission(param.package_path + "/missions/previous_missions/mission_" + file_name_time + ".json");
+        }
 
         // Planner state intialization
         if(param.multisim_experiment){
@@ -67,13 +69,10 @@ namespace DynamicPlanning{
             }
         }
 
-        if(param.world_use_octomap){
-            setDistmap(mission.world_file_name);
-        }
-
+        // Agent
         agents.resize(mission.qn);
         for(int qi = 0; qi < mission.qn; qi++){
-            agents[qi] = std::make_unique<TrajPlanner>(qi, nh, param, mission, distmap_ptr);
+            agents[qi] = std::make_unique<AgentManager>(nh, param, mission, qi);
             dynamic_msgs::State initial_state;
             initial_state.pose.position = point3DToPointMsg(mission.agents[qi].start_position);
             agents[qi]->setCurrentState(initial_state);
@@ -115,14 +114,14 @@ namespace DynamicPlanning{
                 initializeTimer();
             } else if (param.multisim_experiment and (sim_current_time - ros::Time::now()).toSec() > 0) {
                 // Wait until next planning period
-                // Note: planning start time = traj_start_time - multisim_time_step
+                // Note: planning_start_time = traj_start_time - multisim_time_step
                 continue;
             } else {
                 doStep();
             }
 
             // Update and broadcast agent and obstacle state
-            update();
+            broadcastMsgs();
 
             // Trajectory planning
             bool success = plan();
@@ -146,30 +145,26 @@ namespace DynamicPlanning{
         }
     }
 
-    void MultiSyncSimulator::setCurrentState(int qi, const dynamic_msgs::State& state){
-        agents[qi]->setCurrentState(state);
-    }
-
-    void MultiSyncSimulator::setDistmap(const std::string& file_name){
-        float max_dist = 1.0; //TODO: parameterization
-        octomap::OcTree* octree_ptr;
-        octree_ptr = new octomap::OcTree(param.world_resolution);
-        if(!octree_ptr->readBinary(file_name)){
-            throw std::invalid_argument("[MultiSyncSimulator] Fail to read octomap file.");
-        }
-
-        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr, mission.world_min, mission.world_max,
-                                                          false);
-        distmap_ptr->update();
-
-        has_distmap = true;
-    }
+//    void MultiSyncSimulator::setDistmap(const std::string& file_name){
+//        float max_dist = 1.0; //TODO: parameterization
+//        octomap::OcTree* octree_ptr;
+//        octree_ptr = new octomap::OcTree(param.world_resolution);
+//        if(!octree_ptr->readBinary(file_name)){
+//            throw std::invalid_argument("[MultiSyncSimulator] Fail to read octomap file.");
+//        }
+//
+//        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr, mission.world_min, mission.world_max,
+//                                                          false);
+//        distmap_ptr->update();
+//
+//        has_distmap = true;
+//    }
 
     bool MultiSyncSimulator::isPlannerReady() {
         bool is_planner_ready = planner_state > PlannerState::WAIT;
 
         if (param.world_use_octomap) {
-            is_planner_ready = is_planner_ready and has_distmap;
+            is_planner_ready = is_planner_ready and has_global_map;
         }
 
         return is_planner_ready;
@@ -184,138 +179,65 @@ namespace DynamicPlanning{
 
     void MultiSyncSimulator::doStep(){
         sim_current_time += ros::Duration(param.multisim_time_step);
+
+        for(int qi = 0; qi < mission.qn; qi++){
+            agents[qi]->doStep(param.multisim_time_step);
+        }
     }
 
-    void MultiSyncSimulator::update(){
-        // Compute ideal state of agents
-        std::vector<dynamic_msgs::State> ideal_agent_curr_states;
-        std::vector<dynamic_msgs::State> ideal_agent_next_states;
-        ideal_agent_curr_states.resize(mission.qn);
-        ideal_agent_next_states.resize(mission.qn);
-        for(int qi = 0; qi < mission.qn; qi++) {
-            ideal_agent_curr_states[qi] = agents[qi]->getCurrentStateMsg();
-            if(initial_update){
-                // initial update
-                ideal_agent_next_states[qi] = agents[qi]->getCurrentStateMsg();
-            }
-            else{
-                ideal_agent_next_states[qi] = agents[qi]->getFutureStateMsg(param.multisim_time_step);
-            }
-        }
-
-        // Measure current state of objects
-        points_t real_agent_curr_positions;
-        real_agent_curr_positions.resize(mission.qn);
-        for(int qi = 0; qi < mission.qn; qi++) {
-            bool external_pose_update = true;
-            tf::StampedTransform transform;
-            try {
-                tf_listener.lookupTransform(param.world_frame_id, "/cf" + std::to_string(mission.agents[qi].cid),
-                                            ros::Time(0), transform);
-                real_agent_curr_positions[qi] = vector3MsgToPoint3d(transform.getOrigin());
-            }
-            catch (tf::TransformException &ex) {
-                ROS_WARN_ONCE("[MultiSyncSimulator] tf listener failed, use ideal state instead.");
-                external_pose_update = false;
-            }
-
-            if(not external_pose_update){
-                // if there is no external pose update, then use ideal agent state.
-                real_agent_curr_positions[qi] = pointMsgToPoint3d(ideal_agent_curr_states[qi].pose.position);
-            }
-        }
-
-        // Update agent's states
-        // If difference between ideal and observed position is small, then use ideal position
-        for(int qi = 0; qi < mission.qn; qi++) {
-            point_t ideal_agent_curr_position = pointMsgToPoint3d(ideal_agent_curr_states[qi].pose.position);
-            double diff = (ideal_agent_curr_position - real_agent_curr_positions[qi]).norm();
-            if (diff > param.multisim_reset_threshold) {
-                dynamic_msgs::State current_state = ideal_agent_curr_states[qi];
-                current_state.pose.position = point3DToPointMsg(real_agent_curr_positions[qi]);
-                current_state.pose.orientation = defaultQuaternion();
-                current_state.velocity.linear = defaultVector();
-                current_state.acceleration.linear = defaultVector();
-                agents[qi]->setCurrentState(current_state);
-                ROS_WARN_STREAM("[MultiSyncSimulator] agent " << qi
-                                                          << ": diff between ideal and real is too big diff=" << diff);
-            } else {
-                agents[qi]->setCurrentState(ideal_agent_next_states[qi]);
-            }
-        }
-
-        // Update obstacle's states to each agent
-        for(int qi = 0; qi < mission.qn; qi++){
+    void MultiSyncSimulator::broadcastMsgs() {
+        // Update obstacle's states for each agent
+        for (int qi = 0; qi < mission.qn; qi++) {
             dynamic_msgs::ObstacleArray msg_obstacles;
-            std::vector<traj_t> obs_prev_trajs;
+            std::vector <traj_t> obs_prev_trajs;
             msg_obstacles.obstacles.clear();
             msg_obstacles.start_time = sim_start_time;
             msg_obstacles.header.stamp = sim_current_time;
 
-            //TODO: Dynamic obstacles
-//            // Update dynamic obstacles (only for reciprocal_rsfc)
-//            if(param.constraint_mode == "reciprocal_rsfc") {
-//                obstacle_generator.update((sim_current_time - sim_start_time).toSec(), param.multisim_observer_stddev);
-//                for (int oi = 0; oi < mission.on; oi++) {
-//                    dynamic_msgs::Obstacle obstacle = obstacle_generator.getObstacle(oi);
-//                    traj_t empty_traj;
-//                    msg_obstacles.obstacles.emplace_back(obstacle);
-//                    obs_prev_trajs.emplace_back(empty_traj);
-//                }
+            //TODO: dynamic obstacles
+//            // Dynamic obstacles
+//            obstacle_generator.update((sim_current_time - sim_start_time).toSec(), 0.0);
+//            for (int oi = 0; oi < mission.on; oi++) {
+//                dynamic_msgs::Obstacle obstacle = obstacle_generator.getObstacle(oi);
+//                traj_t empty_traj;
+//                msg_obstacles.obstacles.emplace_back(obstacle);
+//                obs_prev_trajs.emplace_back(empty_traj);
 //            }
 
             // Other agents
-            for(int qj = 0; qj < mission.qn; qj++){
-                if(qi == qj){
-                    continue;
-                }
-
+            for (int qj = 0; qj < mission.qn; qj++) {
                 // communication range
-                if(agents[qi]->getCurrentPosition().distance(agents[qj]->getCurrentPosition()) > param.communication_range){
+                double dist_to_agent = agents[qi]->getCurrentPosition().distance(agents[qj]->getCurrentPosition());
+                if (qi == qj) {
                     continue;
                 }
 
-                dynamic_msgs::Obstacle obstacle;
-                obstacle.id = qj;
-                obstacle.type = ObstacleType::AGENT;
-
-                // If diff between ideal and observed position is small, then use ideal position
-                point_t ideal_agent_curr_position = pointMsgToPoint3d(ideal_agent_curr_states[qj].pose.position);
-                if((ideal_agent_curr_position - real_agent_curr_positions[qj]).norm() > param.multisim_reset_threshold)
-                {
-                    obstacle.pose.position = point3DToPointMsg(real_agent_curr_positions[qj]);
-                    obstacle.pose.orientation = defaultQuaternion();
-                    obstacle.velocity.linear = defaultVector();
-                }
-                else {
-                    obstacle.pose = ideal_agent_next_states[qj].pose;
-                    obstacle.velocity = ideal_agent_next_states[qj].velocity;
+                if(param.communication_range > 0 and dist_to_agent > param.communication_range){
+                    continue;
                 }
 
-                obstacle.goal = point3DToPointMsg(agents[qj]->getDesiredGoalPosition());
-                obstacle.radius = mission.agents[qj].radius;
-                obstacle.max_acc = mission.agents[qj].max_acc[0];
-                obstacle.downwash = mission.agents[qj].downwash;
-                msg_obstacles.obstacles.emplace_back(obstacle);
+                dynamic_msgs::Obstacle msg_obstacle = agents[qj]->getObstacleMsg();
+                msg_obstacles.obstacles.emplace_back(msg_obstacle);
 
-                traj_t obs_traj = agents[qj]->getTraj();
-                obs_prev_trajs.emplace_back(obs_traj);
+                // Map merging
+                if(not param.world_use_global_map){
+                    agents[qi]->mergeMapCallback(agents[qj]->getOctomapMsg());
+                }
             }
 
-            agents[qi]->setObstacles(msg_obstacles);
-            agents[qi]->setObsPrevTrajs(obs_prev_trajs);
             agents[qi]->setPlannerState(planner_state);
+            agents[qi]->obstacleCallback(msg_obstacles);
 
-            if(mission_changed){
+            if (mission_changed) {
                 agents[qi]->setStartPosition(mission.agents[qi].start_position);
                 agents[qi]->setDesiredGoal(mission.agents[qi].desired_goal_position);
             }
         }
 
-        if(initial_update){
+        if (initial_update) {
             initial_update = false;
         }
-        if(mission_changed){
+        if (mission_changed) {
             mission_changed = false;
         }
     }
@@ -353,7 +275,9 @@ namespace DynamicPlanning{
         publishAgentState();
         publishDesiredTrajs();
 //        publishGridMap();
-        publishCommunicationRange();
+        if(param.communication_range > 0){
+            publishCommunicationRange();
+        }
     }
 
     bool MultiSyncSimulator::isFinished(){
@@ -362,14 +286,16 @@ namespace DynamicPlanning{
         }
 
         for(int qi = 0; qi < mission.qn; qi++) {
-            point_t current_position = agents[qi]->getCurrentPosition();
+            point3d current_position = agents[qi]->getCurrentPosition();
             double dist_to_goal;
             if(planner_state == PlannerState::GOTO){
-                dist_to_goal = (current_position - mission.agents[qi].desired_goal_position).norm();
+                dist_to_goal = current_position.distance(mission.agents[qi].desired_goal_position);
             }
             else if(planner_state == PlannerState::GOBACK){
-                dist_to_goal = (current_position - mission.agents[qi].start_position).norm();
+                dist_to_goal = current_position.distance(mission.agents[qi].start_position);
             }
+
+//            ROS_INFO_STREAM("agent:" << qi << ",dist:"<< dist_to_goal << ",thres:" << param.goal_threshold);
 
             if (dist_to_goal > param.goal_threshold) {
                 return false;
@@ -403,11 +329,11 @@ namespace DynamicPlanning{
     }
 
     void MultiSyncSimulator::setObstacles(int qi, const dynamic_msgs::ObstacleArray& obstacles){
-        agents[qi]->setObstacles(obstacles);
+        agents[qi]->obstacleCallback(obstacles);
     }
 
     void MultiSyncSimulator::savePlanningResult(){
-        double record_time_step = param.multisim_record_time_step;
+        double record_time_step = param.multisim_save_time_step;
         double future_time = 0;
         while(future_time < param.multisim_time_step - SP_EPSILON_FLOAT){
             for(int qi = 0; qi < mission.qn; qi++){
@@ -449,7 +375,7 @@ namespace DynamicPlanning{
         while(future_time < param.multisim_time_step - SP_EPSILON_FLOAT) {
             for (int qi = 0; qi < mission.qn; qi++) {
                 dynamic_msgs::State agent_state_i = agents[qi]->getFutureStateMsg(future_time);
-                point_t agent_position_i = pointMsgToPoint3d(agent_state_i.pose.position);
+                point3d agent_position_i = pointMsgToPoint3d(agent_state_i.pose.position);
                 double current_safety_ratio_agent = SP_INFINITY;
                 int min_qj = -1;
                 for (int qj = 0; qj < mission.qn; qj++) {
@@ -459,7 +385,7 @@ namespace DynamicPlanning{
 
                     double downwash = (mission.agents[qi].downwash * mission.agents[qi].radius + mission.agents[qj].downwash * mission.agents[qj].radius) / (mission.agents[qi].radius + mission.agents[qj].radius);
                     dynamic_msgs::State agent_state_j = agents[qj]->getFutureStateMsg(future_time);
-                    point_t agent_position_j = pointMsgToPoint3d(agent_state_j.pose.position);
+                    point3d agent_position_j = pointMsgToPoint3d(agent_state_j.pose.position);
                     double dist_to_agent = ellipsoidalDistance(agent_position_i, agent_position_j, downwash);
 
                     double safety_ratio = dist_to_agent / (mission.agents[qi].radius + mission.agents[qj].radius);
@@ -481,7 +407,7 @@ namespace DynamicPlanning{
                 double current_safety_margin_obs = SP_INFINITY;
                 for (int oi = 0; oi < mission.on; oi++) {
                     dynamic_msgs::Obstacle obstacle = obstacle_generator.getObstacle(oi);
-                    point_t obs_position = pointMsgToPoint3d(obstacle.pose.position);
+                    point3d obs_position = pointMsgToPoint3d(obstacle.pose.position);
                     double dist_to_obs = (agent_position_i - obs_position).norm();
 
                     double safety_ratio = dist_to_obs / (mission.agents[qi].radius + obstacle.radius);
@@ -505,8 +431,7 @@ namespace DynamicPlanning{
 
         // planning time
         for(int qi = 0; qi < mission.qn; qi++){
-            N_average++;
-            PlanningTimeStatistics agent_planning_time = agents[qi]->getPlanningTime();
+            PlanningTimeStatistics agent_planning_time = agents[qi]->getPlanningStatistics().planning_time;
             planning_time.update(agent_planning_time);
         }
     }
@@ -517,7 +442,7 @@ namespace DynamicPlanning{
         result_csv.open(file_name, std::ios_base::app);
         if (sim_current_time == sim_start_time) {
             for(int qi = 0; qi < mission.qn; qi++){
-                result_csv << "id,t,px,py,pz,vx,vy,vz,ax,ay,az,planning_time,qp_cost,planning_report,size";
+                result_csv << "id,t,px,py,pz,vx,vy,vz,ax,ay,az,planning_time,qp_cost,size";
                 if(qi < mission.qn - 1 or mission.on != 0){
                     result_csv << ",";
                 }
@@ -537,25 +462,26 @@ namespace DynamicPlanning{
             }
         }
 
-        double record_time_step = param.multisim_record_time_step;
+        double record_time_step = param.multisim_save_time_step;
         double future_time = 0;
         double t = (sim_current_time - sim_start_time).toSec();
         while(future_time < param.multisim_time_step) {
             for (int qi = 0; qi < mission.qn; qi++) {
+                dynamic_msgs::State future_state = agents[qi]->getFutureStateMsg(future_time);
+                PlanningStatistics statistics = agents[qi]->getPlanningStatistics();
                 result_csv << qi << "," << t << ","
-                        << agents[qi]->getFutureStateMsg(future_time).pose.position.x << ","
-                        << agents[qi]->getFutureStateMsg(future_time).pose.position.y << ","
-                        << agents[qi]->getFutureStateMsg(future_time).pose.position.z << ","
-                        << agents[qi]->getFutureStateMsg(future_time).velocity.linear.x << ","
-                        << agents[qi]->getFutureStateMsg(future_time).velocity.linear.y << ","
-                        << agents[qi]->getFutureStateMsg(future_time).velocity.linear.z << ","
-                        << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.x << ","
-                        << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.y << ","
-                        << agents[qi]->getFutureStateMsg(future_time).acceleration.linear.z << ","
-                        << agents[qi]->getPlanningTime().total_planning_time.current << ","
-                        << agents[qi]->getTrajCost() << ","
-                           << agents[qi]->getPlanningReport() << ","
-                           << mission.agents[qi].radius;
+                        << future_state.pose.position.x << ","
+                        << future_state.pose.position.y << ","
+                        << future_state.pose.position.z << ","
+                        << future_state.velocity.linear.x << ","
+                        << future_state.velocity.linear.y << ","
+                        << future_state.velocity.linear.z << ","
+                        << future_state.acceleration.linear.x << ","
+                        << future_state.acceleration.linear.y << ","
+                        << future_state.acceleration.linear.z << ","
+                        << statistics.planning_time.total_planning_time.current << ","
+                        << statistics.traj_cost << ","
+                        << mission.agents[qi].radius;
 
                 if (qi < mission.qn - 1 or mission.on != 0) {
                     result_csv << ",";
@@ -633,41 +559,41 @@ namespace DynamicPlanning{
         result_csv_out.close();
     }
 
-    void MultiSyncSimulator::saveNormalVectorAsCSV(){
-        std::string file_name = param.package_path + "/log/normalSum_" + std::to_string(sim_start_time.toSec())
-                                + "_" + param.getPlannerModeStr() + "_" + std::to_string(mission.qn) + "agents.csv";
-        std::ofstream normal_csv;
-        normal_csv.open(file_name, std::ios_base::app);
-
-        if (sim_current_time == sim_start_time) {
-            normal_csv << "t,";
-            for (int qi = 0; qi < mission.qn; qi++) {
-                for (int qj = qi + 1; qj < mission.qn; qj++) {
-                    normal_csv << "(" << qi << "-" << qj << ")";
-                    if (qi == mission.qn - 2) {
-                        normal_csv << "\n";
-                    } else {
-                        normal_csv << ",";
-                    }
-                }
-            }
-        }
-
-        double t = (sim_current_time - sim_start_time).toSec();
-        normal_csv << t << ",";
-        for (int qi = 0; qi < mission.qn; qi++) {
-            for (int qj = qi + 1; qj < mission.qn; qj++) {
-                point_t normal_vector = agents[qi]->getNormalVector(qj, 0) + agents[qj]->getNormalVector(qi, 0);
-                normal_csv << normal_vector.x();
-                if(qi == mission.qn - 2){
-                    normal_csv << "\n";
-                }
-                else{
-                    normal_csv << ",";
-                }
-            }
-        }
-    }
+//    void MultiSyncSimulator::saveNormalVectorAsCSV(){
+//        std::string file_name = param.package_path + "/log/normalSum_" + std::to_string(sim_start_time.toSec())
+//                                + "_" + param.getPlannerModeStr() + "_" + std::to_string(mission.qn) + "agents.csv";
+//        std::ofstream normal_csv;
+//        normal_csv.open(file_name, std::ios_base::app);
+//
+//        if (sim_current_time == sim_start_time) {
+//            normal_csv << "t,";
+//            for (int qi = 0; qi < mission.qn; qi++) {
+//                for (int qj = qi + 1; qj < mission.qn; qj++) {
+//                    normal_csv << "(" << qi << "-" << qj << ")";
+//                    if (qi == mission.qn - 2) {
+//                        normal_csv << "\n";
+//                    } else {
+//                        normal_csv << ",";
+//                    }
+//                }
+//            }
+//        }
+//
+//        double t = (sim_current_time - sim_start_time).toSec();
+//        normal_csv << t << ",";
+//        for (int qi = 0; qi < mission.qn; qi++) {
+//            for (int qj = qi + 1; qj < mission.qn; qj++) {
+//                point3d normal_vector = agents[qi]->getNormalVector(qj, 0) + agents[qj]->getNormalVector(qi, 0);
+//                normal_csv << normal_vector.x();
+//                if(qi == mission.qn - 2){
+//                    normal_csv << "\n";
+//                }
+//                else{
+//                    normal_csv << ",";
+//                }
+//            }
+//        }
+//    }
 
     double MultiSyncSimulator::getTotalDistance(){
         double dist_total = 0;
@@ -680,18 +606,25 @@ namespace DynamicPlanning{
         return dist_total;
     }
 
-    void MultiSyncSimulator::octomapCallback(const octomap_msgs::Octomap& octomap_msg){
-        if(has_distmap){
-            return;
-        }
+//    void MultiSyncSimulator::octomapCallback(const octomap_msgs::Octomap& octomap_msg){
+//        if(has_distmap){
+//            return;
+//        }
+//
+//        float max_dist = 1.0; //TODO: parameterization
+//        auto* octree_ptr = dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(octomap_msg));
+//        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
+//                                                          mission.world_min, mission.world_max,
+//                                                          false);
+//        distmap_ptr->update();
+//        has_distmap = true;
+//    }
 
-        float max_dist = 1.0; //TODO: parameterization
-        auto* octree_ptr = dynamic_cast<octomap::OcTree*>(octomap_msgs::fullMsgToMap(octomap_msg));
-        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr,
-                                                          mission.world_min, mission.world_max,
-                                                          false);
-        distmap_ptr->update();
-        has_distmap = true;
+    void MultiSyncSimulator::globalMapCallback(const sensor_msgs::PointCloud2& global_map){
+        for(int qi = 0; qi < mission.qn; qi++){
+            agents[qi]->setGlobalMap(global_map);
+        }
+        has_global_map = true;
     }
 
     bool MultiSyncSimulator::startPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
@@ -711,7 +644,6 @@ namespace DynamicPlanning{
 
     bool MultiSyncSimulator::updateGoalCallback(dynamic_msgs::UpdateGoals::Request& req,
                                                 dynamic_msgs::UpdateGoals::Response& res){
-
         bool success = (not req.file_name.empty()) and mission.initialize(req.file_name,
                                                                           param.multisim_max_noise,
                                                                           param.world_dimension,
@@ -773,10 +705,10 @@ namespace DynamicPlanning{
             marker.scale.y = 0.1;
             marker.scale.z = 0.1;
             marker.pose.position = point3DToPointMsg(mission.agents[qi].start_position);
-            marker.pose.orientation = point3DToQuaternionMsg(point_t(0,0,0));
+            marker.pose.orientation = point3DToQuaternionMsg(point3d(0, 0, 0));
             msg_start_goal_points_vis.markers.emplace_back(marker);
 
-            point_t agent_desired_goal = agents[qi]->getDesiredGoalPosition();
+            point3d agent_desired_goal = agents[qi]->getDesiredGoalPosition();
             marker.ns = "desired_goal";
             marker.id = qi;
             marker.type = visualization_msgs::Marker::CUBE;
@@ -787,7 +719,7 @@ namespace DynamicPlanning{
             marker.pose.orientation = defaultQuaternion();
             msg_start_goal_points_vis.markers.emplace_back(marker);
 
-            point_t agent_current_goal = agents[qi]->getCurrentGoalPosition();
+            point3d agent_current_goal = agents[qi]->getCurrentGoalPosition();
             marker.ns = "current_goal";
             marker.id = qi;
             marker.type = visualization_msgs::Marker::SPHERE;
@@ -795,18 +727,18 @@ namespace DynamicPlanning{
             marker.scale.y = 0.1;
             marker.scale.z = 0.1;
             marker.pose.position = point3DToPointMsg(agent_current_goal);
-            marker.pose.orientation = point3DToQuaternionMsg(point_t(0,0,0));
+            marker.pose.orientation = point3DToQuaternionMsg(point3d(0, 0, 0));
             msg_start_goal_points_vis.markers.emplace_back(marker);
 
-            dynamic_msgs::Goal goal;
-            goal.planner_seq = agents[qi]->getPlannerSeq();
-            goal.id = qi;
-            goal.current_goal = point3DToPointMsg(agent_current_goal);
-            goal.desired_goal = point3DToPointMsg(agent_desired_goal);
-            msg_goal_positions_raw.goals.emplace_back(goal);
+//            dynamic_msgs::Goal goal;
+//            goal.planner_seq = agents[qi]->getPlannerSeq();
+//            goal.id = qi;
+//            goal.current_goal = point3DToPointMsg(agent_current_goal);
+//            goal.desired_goal = point3DToPointMsg(agent_desired_goal);
+//            msg_goal_positions_raw.goals.emplace_back(goal);
         }
         pub_start_goal_points_vis.publish(msg_start_goal_points_vis);
-        pub_goal_positions_raw.publish(msg_goal_positions_raw);
+//        pub_goal_positions_raw.publish(msg_goal_positions_raw);
     }
 
     void MultiSyncSimulator::publishWorldBoundary(){
@@ -894,12 +826,13 @@ namespace DynamicPlanning{
         std_msgs::Float64MultiArray msg_agent_acc_limits;
 
         for(int qi = 0; qi < mission.qn; qi++){
-            msg_agent_velocities_x.data.emplace_back(agents[qi]->getCurrentStateMsg().velocity.linear.x);
-            msg_agent_velocities_y.data.emplace_back(agents[qi]->getCurrentStateMsg().velocity.linear.y);
-            msg_agent_velocities_z.data.emplace_back(agents[qi]->getCurrentStateMsg().velocity.linear.z);
-            msg_agent_acceleration_x.data.emplace_back(agents[qi]->getCurrentStateMsg().acceleration.linear.x);
-            msg_agent_acceleration_y.data.emplace_back(agents[qi]->getCurrentStateMsg().acceleration.linear.y);
-            msg_agent_acceleration_z.data.emplace_back(agents[qi]->getCurrentStateMsg().acceleration.linear.z);
+            dynamic_msgs::State msg_current_state = agents[qi]->getCurrentStateMsg();
+            msg_agent_velocities_x.data.emplace_back(msg_current_state.velocity.linear.x);
+            msg_agent_velocities_y.data.emplace_back(msg_current_state.velocity.linear.y);
+            msg_agent_velocities_z.data.emplace_back(msg_current_state.velocity.linear.z);
+            msg_agent_acceleration_x.data.emplace_back(msg_current_state.acceleration.linear.x);
+            msg_agent_acceleration_y.data.emplace_back(msg_current_state.acceleration.linear.y);
+            msg_agent_acceleration_z.data.emplace_back(msg_current_state.acceleration.linear.z);
         }
         msg_agent_vel_limits.data.emplace_back(mission.agents[0].max_vel[0]);
         msg_agent_vel_limits.data.emplace_back(-mission.agents[0].max_vel[0]);
@@ -916,15 +849,15 @@ namespace DynamicPlanning{
         pub_agent_acc_limits.publish(msg_agent_acc_limits);
     }
     void MultiSyncSimulator::publishDesiredTrajs() {
-        // Raw
-        dynamic_msgs::TrajectoryArray msg_desired_trajs_raw;
-        msg_desired_trajs_raw.header.stamp = sim_current_time;
-        msg_desired_trajs_raw.planner_seq = agents[0]->getPlannerSeq();
-        msg_desired_trajs_raw.trajectories.resize(mission.qn);
-        for(int qi = 0; qi < mission.qn; qi++){
-            msg_desired_trajs_raw.trajectories[qi] = trajToTrajMsg(agents[qi]->getTraj(), qi, param.dt);
-        }
-        pub_desired_trajs_raw.publish(msg_desired_trajs_raw);
+//        // Raw
+//        dynamic_msgs::TrajectoryArray msg_desired_trajs_raw;
+//        msg_desired_trajs_raw.header.stamp = sim_current_time;
+//        msg_desired_trajs_raw.planner_seq = agents[0]->getPlannerSeq();
+//        msg_desired_trajs_raw.trajectories.resize(mission.qn);
+//        for(int qi = 0; qi < mission.qn; qi++){
+//            msg_desired_trajs_raw.trajectories[qi] = trajToTrajMsg(agents[qi]->getTraj(), qi, param.dt);
+//        }
+//        pub_desired_trajs_raw.publish(msg_desired_trajs_raw);
 
         // Vis
         visualization_msgs::MarkerArray msg_desired_trajs_vis;
@@ -949,7 +882,7 @@ namespace DynamicPlanning{
             }
             msg_desired_trajs_vis.markers.emplace_back(marker);
 
-            //Last point
+            // Last point
             marker.points.clear();
             marker.type = visualization_msgs::Marker::SPHERE;
             marker.ns = "last_point";
@@ -967,46 +900,46 @@ namespace DynamicPlanning{
         pub_desired_trajs_vis.publish(msg_desired_trajs_vis);
     }
 
-    void MultiSyncSimulator::publishGridMap() {
-        if(agents[0]->getPlannerSeq() > 2){
-            return;
-        }
-
-        if(not param.world_use_octomap) {
-            return;
-        }
-
-        GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
-        grid_based_planner.plan(mission.agents[0].start_position, mission.agents[0].start_position, 0,
-                                mission.agents[0].radius, mission.agents[0].downwash);
-        points_t free_grid_points = grid_based_planner.getFreeGridPoints();
-
-        visualization_msgs::MarkerArray msg_grid_map;
-        visualization_msgs::Marker marker;
-        marker.header.frame_id = param.world_frame_id;
-        marker.type = visualization_msgs::Marker::CUBE;
-        marker.action = visualization_msgs::Marker::ADD;
-
-        size_t marker_id = 0;
-        for(const auto& point : free_grid_points){
-            marker.id = marker_id++;
-
-            marker.pose.position = point3DToPointMsg(point);
-            marker.pose.orientation = defaultQuaternion();
-
-            marker.scale.x = 0.02;
-            marker.scale.y = 0.02;
-            marker.scale.z = 0.02;
-
-            marker.color.r = 0;
-            marker.color.g = 0;
-            marker.color.b = 0;
-            marker.color.a = 0.5;
-
-            msg_grid_map.markers.emplace_back(marker);
-        }
-        pub_grid_map.publish(msg_grid_map);
-    }
+//    void MultiSyncSimulator::publishGridMap() {
+//        if(agents[0]->getPlannerSeq() > 2){
+//            return;
+//        }
+//
+//        if(not param.world_use_octomap) {
+//            return;
+//        }
+//
+//        GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
+//        grid_based_planner.plan(mission.agents[0].start_position, mission.agents[0].start_position, 0,
+//                                mission.agents[0].radius, mission.agents[0].downwash);
+//        points_t free_grid_points = grid_based_planner.getFreeGridPoints();
+//
+//        visualization_msgs::MarkerArray msg_grid_map;
+//        visualization_msgs::Marker marker;
+//        marker.header.frame_id = param.world_frame_id;
+//        marker.type = visualization_msgs::Marker::CUBE;
+//        marker.action = visualization_msgs::Marker::ADD;
+//
+//        size_t marker_id = 0;
+//        for(const auto& point : free_grid_points){
+//            marker.id = marker_id++;
+//
+//            marker.pose.position = point3DToPointMsg(point);
+//            marker.pose.orientation = defaultQuaternion();
+//
+//            marker.scale.x = 0.02;
+//            marker.scale.y = 0.02;
+//            marker.scale.z = 0.02;
+//
+//            marker.color.r = 0;
+//            marker.color.g = 0;
+//            marker.color.b = 0;
+//            marker.color.a = 0.5;
+//
+//            msg_grid_map.markers.emplace_back(marker);
+//        }
+//        pub_grid_map.publish(msg_grid_map);
+//    }
 
     void MultiSyncSimulator::publishCommunicationRange(){
         visualization_msgs::MarkerArray msg_communication_range;

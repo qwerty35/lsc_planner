@@ -50,7 +50,7 @@ namespace DynamicPlanning {
 
         // Set CPLEX algorithm
 //        cplex.setParam(IloCplex::Param::TimeLimit, 0.02);
-//        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual); //0.0101956
+        cplex.setParam(IloCplex::Param::RootAlgorithm, IloCplex::Dual); //0.0101956
 
         // Initialize QP model
         populatebyrow(model, var, con, agent, constraints);
@@ -78,11 +78,11 @@ namespace DynamicPlanning {
             for (int m = 0; m < M; m++) {
                 for (int i = 0; i < n + 1; i++) {
                     if (dim == 3) {
-                        trajectory[m][i] = point_t(vals[0 * offset_dim + m * offset_seg + i],
+                        trajectory[m][i] = point3d(vals[0 * offset_dim + m * offset_seg + i],
                                                    vals[1 * offset_dim + m * offset_seg + i],
                                                    vals[2 * offset_dim + m * offset_seg + i]);
                     } else {
-                        trajectory[m][i] = point_t(vals[0 * offset_dim + m * offset_seg + i],
+                        trajectory[m][i] = point3d(vals[0 * offset_dim + m * offset_seg + i],
                                                    vals[1 * offset_dim + m * offset_seg + i],
                                                    param.world_z_2d);
                     }
@@ -525,20 +525,20 @@ namespace DynamicPlanning {
             }
         }
 
-        // communication bound
-        if(param.communication_range > 0){
-            double bound_sq = 0.25 * param.communication_range * param.communication_range;
-            for(int m = 0; m < M; m++){
-                for(int i = 0; i < n + 1; i++){
-                    IloNumExpr expr(env);
-                    for(int k = 0; k < dim; k++){
-                        expr += ((x[k * offset_dim + m * offset_seg + i] - agent.current_state.position(k)))
-                                * ((x[k * offset_dim + m * offset_seg + i] - agent.current_state.position(k)));
-                    }
-                    c.add(expr <= bound_sq);
-                }
-            }
-        }
+//        // communication bound
+//        if(param.communication_range > 0){
+//            double bound_sq = 0.25 * param.communication_range * param.communication_range;
+//            for(int m = 0; m < M; m++){
+//                for(int i = 0; i < n + 1; i++){
+//                    IloNumExpr expr(env);
+//                    for(int k = 0; k < dim; k++){
+//                        expr += ((x[k * offset_dim + m * offset_seg + i] - agent.current_state.position(k)))
+//                                * ((x[k * offset_dim + m * offset_seg + i] - agent.current_state.position(k)));
+//                    }
+//                    c.add(expr <= bound_sq);
+//                }
+//            }
+//        }
 
         model.add(c);
     }

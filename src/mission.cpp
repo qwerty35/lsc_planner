@@ -29,8 +29,8 @@ namespace DynamicPlanning {
             throw std::invalid_argument("[Mission] World must have one element");
         }
         const Value &dimension = world_list[0].GetObject()["dimension"];
-        world_min = point_t(dimension[0].GetDouble(), dimension[1].GetDouble(), dimension[2].GetDouble());
-        world_max = point_t(dimension[3].GetDouble(), dimension[4].GetDouble(), dimension[5].GetDouble());
+        world_min = point3d(dimension[0].GetDouble(), dimension[1].GetDouble(), dimension[2].GetDouble());
+        world_max = point3d(dimension[3].GetDouble(), dimension[4].GetDouble(), dimension[5].GetDouble());
 
         // Quadrotors
         const Value& quadrotor_list = document["quadrotors"];
@@ -87,12 +87,12 @@ namespace DynamicPlanning {
             }
             const Value &start = agents_list[qi].GetObject()["start"];
             if(world_dimension == 2){
-                agents[qi].start_position = point_t(start[0].GetDouble(),
+                agents[qi].start_position = point3d(start[0].GetDouble(),
                                                     start[1].GetDouble(),
                                                     world_z_2d);
             }
             else{
-                agents[qi].start_position = point_t(start[0].GetDouble(),
+                agents[qi].start_position = point3d(start[0].GetDouble(),
                                                     start[1].GetDouble(),
                                                     start[2].GetDouble());
             }
@@ -105,12 +105,12 @@ namespace DynamicPlanning {
             }
             const Value &goal = agents_list[qi].GetObject()["goal"];
             if(world_dimension == 2){
-                agents[qi].desired_goal_position = point_t(goal[0].GetDouble(),
+                agents[qi].desired_goal_position = point3d(goal[0].GetDouble(),
                                                            goal[1].GetDouble(),
                                                            world_z_2d);
             }
             else{
-                agents[qi].desired_goal_position = point_t(goal[0].GetDouble(),
+                agents[qi].desired_goal_position = point3d(goal[0].GetDouble(),
                                                            goal[1].GetDouble(),
                                                            goal[2].GetDouble());
             }
@@ -325,7 +325,7 @@ namespace DynamicPlanning {
         for (int qi = 0; qi < multisim_qn; qi++) {
             Agent agent = default_agent;
             agent.id = qi;
-            point_t start_point(circle_radius * std::cos(qi * 2 * PI / multisim_qn),
+            point3d start_point(circle_radius * std::cos(qi * 2 * PI / multisim_qn),
                                          circle_radius * std::sin(qi * 2 * PI / multisim_qn),
                                 z_2d);
             agent.start_position = start_point;

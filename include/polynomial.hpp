@@ -25,9 +25,9 @@ namespace DynamicPlanning{
 
     //TODO: MINVO basis
 
-    static point_t getPointFromControlPoints(points_t control_points,
+    static point3d getPointFromControlPoints(points_t control_points,
                                              double t_normalized){
-        point_t point;
+        point3d point;
         double t = t_normalized;
         if(t < 0 - SP_EPSILON || t > 1 + SP_EPSILON){
             throw std::invalid_argument("[Polynomial] Input of getPointFromControlPoints is out of bound");
@@ -42,7 +42,7 @@ namespace DynamicPlanning{
             z += control_points[i].z() * b_i_n;
         }
 
-        point = point_t((float)x, (float)y, (float)z);
+        point = point3d((float)x, (float)y, (float)z);
         return point;
     }
 
@@ -73,7 +73,7 @@ namespace DynamicPlanning{
             throw std::invalid_argument("[Polynomial] Input of getOdom is out of bound");
         }
 
-        point_t position = getPointFromControlPoints(control_points[m], current_time / dt - m);
+        point3d position = getPointFromControlPoints(control_points[m], current_time / dt - m);
         state.pose.position.x = position.x();
         state.pose.position.y = position.y();
         state.pose.position.z = position.z();
@@ -83,7 +83,7 @@ namespace DynamicPlanning{
         for(int i = 0; i < n; i++){
             velocity_points[i] = (control_points[m][i+1] - control_points[m][i]) * n * pow(dt, -1);
         }
-        point_t velocity = getPointFromControlPoints(velocity_points, current_time / dt - m);
+        point3d velocity = getPointFromControlPoints(velocity_points, current_time / dt - m);
         state.velocity.linear.x = velocity.x();
         state.velocity.linear.y = velocity.y();
         state.velocity.linear.z = velocity.z();
@@ -93,7 +93,7 @@ namespace DynamicPlanning{
         for(int i = 0; i < n-1; i++){
             acceleration_points[i] = (velocity_points[i+1] - velocity_points[i]) * (n-1) * pow(dt, -1);
         }
-        point_t acceleration = getPointFromControlPoints(acceleration_points, current_time / dt - m);
+        point3d acceleration = getPointFromControlPoints(acceleration_points, current_time / dt - m);
         state.acceleration.linear.x = acceleration.x();
         state.acceleration.linear.y = acceleration.y();
         state.acceleration.linear.z = acceleration.z();
@@ -103,18 +103,18 @@ namespace DynamicPlanning{
         for(int i = 0; i < n-2; i++){
             jerk_points[i] = (acceleration_points[i+1] - acceleration_points[i]) * (n-2) * pow(dt, -1);
         }
-        point_t jerk = getPointFromControlPoints(jerk_points, current_time / dt - m);
+        point3d jerk = getPointFromControlPoints(jerk_points, current_time / dt - m);
 
-        point_t thrust = acceleration + point_t(0, 0, 9.81); // add gravity
+        point3d thrust = acceleration + point3d(0, 0, 9.81); // add gravity
 
-        point_t z_body = thrust.normalized();
-        point_t x_world(1, 0, 0);
-        point_t y_body = (z_body.cross(x_world)).normalized();
-        point_t x_body = y_body.cross(z_body);
+        point3d z_body = thrust.normalized();
+        point3d x_world(1, 0, 0);
+        point3d y_body = (z_body.cross(x_world)).normalized();
+        point3d x_body = y_body.cross(z_body);
 
-        point_t jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
-        point_t h_w = jerk_orth_zbody * (1 / thrust.norm());
-        point_t omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
+        point3d jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
+        point3d h_w = jerk_orth_zbody * (1 / thrust.norm());
+        point3d omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
         state.velocity.angular.x = omega.x();
         state.velocity.angular.y = omega.y();
         state.velocity.angular.z = omega.z();
@@ -144,7 +144,7 @@ namespace DynamicPlanning{
             t_normalized = (current_time - time_segments[m]) / segment_length;
         }
 
-        point_t position = getPointFromControlPoints(control_points[m], t_normalized);
+        point3d position = getPointFromControlPoints(control_points[m], t_normalized);
         state.pose.position.x = position.x();
         state.pose.position.y = position.y();
         state.pose.position.z = position.z();
@@ -158,7 +158,7 @@ namespace DynamicPlanning{
         for(int i = 0; i < n; i++){
             velocity_points[i] = (control_points[m][i+1] - control_points[m][i]) * n * pow(segment_length, -1);
         }
-        point_t velocity = getPointFromControlPoints(velocity_points, t_normalized);
+        point3d velocity = getPointFromControlPoints(velocity_points, t_normalized);
         state.velocity.linear.x = velocity.x();
         state.velocity.linear.y = velocity.y();
         state.velocity.linear.z = velocity.z();
@@ -168,7 +168,7 @@ namespace DynamicPlanning{
         for(int i = 0; i < n-1; i++){
             acceleration_points[i] = (velocity_points[i+1] - velocity_points[i]) * (n-1) * pow(segment_length, -1);
         }
-        point_t acceleration = getPointFromControlPoints(acceleration_points, t_normalized);
+        point3d acceleration = getPointFromControlPoints(acceleration_points, t_normalized);
         state.acceleration.linear.x = acceleration.x();
         state.acceleration.linear.y = acceleration.y();
         state.acceleration.linear.z = acceleration.z();
@@ -178,18 +178,18 @@ namespace DynamicPlanning{
         for(int i = 0; i < n-1; i++){
             jerk_points[i] = (acceleration_points[i+1] - acceleration_points[i]) * (n-2) * pow(segment_length, -1);
         }
-        point_t jerk = getPointFromControlPoints(jerk_points, t_normalized);
+        point3d jerk = getPointFromControlPoints(jerk_points, t_normalized);
 
-        point_t thrust = acceleration + point_t(0, 0, 9.81); // add gravity
+        point3d thrust = acceleration + point3d(0, 0, 9.81); // add gravity
 
-        point_t z_body = thrust.normalized();
-        point_t x_world(1, 0, 0);
-        point_t y_body = (z_body.cross(x_world)).normalized();
-        point_t x_body = y_body.cross(z_body);
+        point3d z_body = thrust.normalized();
+        point3d x_world(1, 0, 0);
+        point3d y_body = (z_body.cross(x_world)).normalized();
+        point3d x_body = y_body.cross(z_body);
 
-        point_t jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
-        point_t h_w = jerk_orth_zbody * (1 / thrust.norm());
-        point_t omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
+        point3d jerk_orth_zbody = jerk - z_body * jerk.dot(z_body);
+        point3d h_w = jerk_orth_zbody * (1 / thrust.norm());
+        point3d omega(-h_w.dot(y_body), h_w.dot(x_body), 0); //TODO: yaw is 0
         state.velocity.angular.x = omega.x();
         state.velocity.angular.y = omega.y();
         state.velocity.angular.z = omega.z();
@@ -218,7 +218,7 @@ namespace DynamicPlanning{
         points_t control_points;
         control_points.resize(n+1);
         for(int i = 0; i < n + 1; i++){
-            control_points[i] = point_t(C(i, 0), C(i, 1), C(i, 2));
+            control_points[i] = point3d(C(i, 0), C(i, 1), C(i, 2));
         }
         return control_points;
     }
@@ -313,7 +313,7 @@ namespace DynamicPlanning{
                                        const points_t& control_points_obs,
                                        const Eigen::MatrixXd& B,
                                        double poly_root_tolerance,
-                                       point_t& closest_point) {
+                                       point3d& closest_point) {
         if(control_points_agent.size() != control_points_obs.size()){
             throw std::invalid_argument("[Polynomial] degree of two polynomials are not same.");
         }
@@ -365,7 +365,7 @@ namespace DynamicPlanning{
         bool isClosestPointInSection = false;
         double a, b, m, g_m, t_cand, dist_cand;
         double dist_closest = SP_INFINITY;
-        point_t p_cand;
+        point3d p_cand;
         for(auto section : Isol){
             a = section.first;
             b = section.second;
@@ -451,7 +451,7 @@ namespace DynamicPlanning{
         points_t control_points_tr;
         control_points_tr.resize(n + 1);
         for(int i = 0; i < n + 1; i++){
-            control_points_tr[i] = point_t(c_tr(0, i), c_tr(1, i), c_tr(2, i));
+            control_points_tr[i] = point3d(c_tr(0, i), c_tr(1, i), c_tr(2, i));
         }
         return control_points_tr;
     }

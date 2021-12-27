@@ -82,8 +82,8 @@ namespace DynamicPlanning {
                          const DynamicPlanning::Mission &_mission,
                          const DynamicPlanning::Param &_param);
 
-        points_t plan(const point_t& current_position,
-                      const point_t& goal_position,
+        points_t plan(const point3d& current_position,
+                      const point3d& goal_position,
                       int agent_id,
                       double agent_radius,
                       double agent_downwash,
@@ -94,8 +94,8 @@ namespace DynamicPlanning {
         points_t getFreeGridPoints();
 
         // Goal
-        point_t findLOSFreeGoal(const point_t& current_position,
-                                const point_t& goal_position,
+        point3d findLOSFreeGoal(const point3d& current_position,
+                                const point3d& goal_position,
                                 double agent_radius);
 
     private:
@@ -109,16 +109,16 @@ namespace DynamicPlanning {
 
         PlanResult plan_result;
 
-        void updateGridInfo(const point_t& current_position, double agent_radius);
+        void updateGridInfo(const point3d& current_position, double agent_radius);
 
-        void updateGridMap(const point_t& current_position,
+        void updateGridMap(const point3d& current_position,
                            const std::vector<Obstacle>& obstacles,
                            double agent_radius,
                            double agent_downwash,
                            const std::set<int>& high_priority_obstacle_ids = {});
 
-        void updateGridMission(const point_t& current_position,
-                               const point_t& goal_position,
+        void updateGridMission(const point3d& current_position,
+                               const point3d& goal_position,
                                int agent_id);
 
         bool isValid(const GridVector& grid_node);
@@ -131,13 +131,13 @@ namespace DynamicPlanning {
 
         [[nodiscard]] points_t gridPathToPath(const gridpath_t& grid_path) const;
 
-        [[nodiscard]]point_t gridVectorToPoint3D(const GridVector& grid_vector) const;
+        [[nodiscard]]point3d gridVectorToPoint3D(const GridVector& grid_vector) const;
 
-        [[nodiscard]] point_t gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const;
+        [[nodiscard]] point3d gridVectorToPoint3D(const GridVector& grid_vector, int dimension) const;
 
-        [[nodiscard]] GridVector point3DToGridVector(const point_t& point) const;
+        [[nodiscard]] GridVector point3DToGridVector(const point3d& point) const;
 
-        bool castRay(const point_t& current_position, const point_t& goal_position, double agent_radius);
+        bool castRay(const point3d& current_position, const point3d& goal_position, double agent_radius);
     };
 }
 

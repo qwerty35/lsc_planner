@@ -14,16 +14,16 @@
 #include <dynamic_msgs/Obstacle.h>
 
 namespace DynamicPlanning {
-    typedef octomap::point3d point_t;
-    typedef octomap::point3d vector_t;
-    typedef std::vector<point_t> points_t;
+    typedef octomap::point3d point3d;
+    typedef octomap::point3d vector3d;
+    typedef std::vector<point3d> points_t;
     typedef std::vector<points_t> traj_t; // [m][control_pts_idx]
 
     struct Line {
-        Line(const point_t &_start_point, const point_t &_end_point)
+        Line(const point3d &_start_point, const point3d &_end_point)
             : start_point(_start_point), end_point(_end_point) {};
 
-        [[nodiscard]] vector_t direction() const {
+        [[nodiscard]] vector3d direction() const {
             if ((end_point - start_point).norm() < SP_EPSILON_FLOAT) {
                 return {0, 0, 0};
             } else {
@@ -31,7 +31,7 @@ namespace DynamicPlanning {
             }
         }
 
-        point_t start_point, end_point;
+        point3d start_point, end_point;
     };
 
     typedef std::vector<Line> lines_t;
@@ -74,6 +74,7 @@ namespace DynamicPlanning {
         PRIORBASED,
         PRIORBASED2,
         PRIORBASED3,
+        ENTROPY,
     };
 
     enum PlannerState {
@@ -133,30 +134,30 @@ namespace DynamicPlanning {
         PlanningTime total_planning_time;
     };
 
+    struct PlanningStatistics {
+        int planning_seq = 0;
+        double traj_cost = 0;
+        PlanningTimeStatistics planning_time;
+    };
+
     enum ObstacleType {
         DYNAMICOBSTACLE,
         AGENT,
     };
 
     struct State{
-        point_t position;
-        point_t velocity;
-        point_t acceleration;
-    };
-
-    struct FlagMsg{
-        bool is_updated = false;
-        int planner_seq = -1;
-        ros::Time updated_time;
+        point3d position;
+        point3d velocity;
+        point3d acceleration;
     };
 
     struct Agent{
         int id; // id used in planner
         int cid; // crazyflie id
         State current_state;
-        point_t start_position;
-        point_t desired_goal_position;
-        point_t current_goal_position;
+        point3d start_position;
+        point3d desired_goal_position;
+        point3d current_goal_position;
         std::vector<double> max_vel; //TODO: in most case, index 0 is only used
         std::vector<double> max_acc; //TODO: in most case, index 0 is only used
         double radius;
@@ -171,15 +172,17 @@ namespace DynamicPlanning {
         ObstacleType type;
         double radius;
         double downwash;
-        point_t position;
-        vector_t velocity;
+        point3d position;
+        vector3d velocity;
         double max_acc;
-        point_t goal_position;
+        point3d goal_position;
+        traj_t prev_traj; //[segment_idx][control_pts_idx], trajectory of obstacles planned at the previous step
+
     };
 
     struct ClosestPoints{
         double dist;
-        point_t closest_point1;
-        point_t closest_point2;
+        point3d closest_point1;
+        point3d closest_point2;
     };
 }

@@ -24,7 +24,7 @@ namespace DynamicPlanning {
         std::map<std::string, Agent> quadrotor_map;
         std::vector<Agent> agents;
         std::vector<std::shared_ptr<ObstacleBase>> obstacles;
-        point_t world_min, world_max;
+        point3d world_min, world_max;
         std::vector<std_msgs::ColorRGBA> color;
         std::string mission_file_name;
         std::string world_file_name;
