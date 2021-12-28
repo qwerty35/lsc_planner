@@ -74,6 +74,7 @@ namespace DynamicPlanning {
         PRIORBASED,
         PRIORBASED2,
         PRIORBASED3,
+        PRIORBASED4,
         ENTROPY,
     };
 
@@ -91,6 +92,12 @@ namespace DynamicPlanning {
         QPFAILED,
         WAITFORROSMSG,
         SUCCESS,
+    };
+
+    enum GoalPlannerState{
+        FORWARD,
+        RIGHT,
+        BACK,
     };
 
     struct PlanningTime {

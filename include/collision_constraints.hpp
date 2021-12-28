@@ -80,7 +80,7 @@ namespace DynamicPlanning {
         void generateFeasibleSFC(const point3d& last_point, const point3d& current_goal_position,
                                  const points_t& grid_path, double agent_radius);
 
-        point3d findProperGoal(const point3d& last_point, const point3d& desired_goal, const points_t& grid_path);
+        point3d findLOSFreeGoal(const point3d& last_point, const point3d& desired_goal, const points_t& grid_path);
 
         SFC findProperSFC(const point3d& start_point, const point3d& goal_point);
 

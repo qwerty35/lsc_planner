@@ -64,6 +64,9 @@ namespace DynamicPlanning {
         else if(goal_mode_str == "prior_based3"){
             goal_mode = GoalMode::PRIORBASED3;
         }
+        else if(goal_mode_str == "prior_based4"){
+            goal_mode = GoalMode::PRIORBASED4;
+        }
         else if(goal_mode_str == "entropy"){
             goal_mode = GoalMode::ENTROPY;
         }
@@ -183,7 +186,10 @@ namespace DynamicPlanning {
     }
 
     std::string Param::getGoalModeStr() const{
-        const std::string planner_mode_strs[] = {"static", "orca", "right_hand", "prior_based", "prior_based2", "prior_based3", "entropy"};
+        const std::string planner_mode_strs[] = {"static", "orca", "right_hand",
+                                                 "prior_based", "prior_based2",
+                                                 "prior_based3", "prior_based4",
+                                                 "entropy"};
         return planner_mode_strs[static_cast<int>(goal_mode)];
     }
 }

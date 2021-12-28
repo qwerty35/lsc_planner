@@ -372,26 +372,26 @@ namespace DynamicPlanning{
         sfcs[M - 1] = sfc_update;
     }
 
-    point3d CollisionConstraints::findProperGoal(const point3d& last_point,
-                                                 const point3d& desired_goal,
-                                                 const points_t& grid_path){
-        if(grid_path.empty()){
-            //TODO: do something
-            return desired_goal;
+    point3d CollisionConstraints::findLOSFreeGoal(const point3d& last_point,
+                                                  const point3d& desired_goal,
+                                                  const points_t& grid_path){
+        point3d los_free_goal;
+        if(grid_path.empty() or sfc_library.empty()){
+            los_free_goal = desired_goal;
         }
+        else{
+            for(const auto& grid_point : grid_path){
+                for(const auto& sfc : sfc_library){
+                    if(!sfc.isPointInSFC(last_point) or !sfc.isPointInSFC(grid_point)){
+                        continue;
+                    }
 
-        point3d proper_goal;
-        for(const auto& grid_point : grid_path){
-            for(const auto& sfc : sfc_library){
-                if(!sfc.isPointInSFC(last_point) or !sfc.isPointInSFC(grid_point)){
-                    continue;
+                    los_free_goal = grid_point;
                 }
-
-                proper_goal = grid_point;
             }
         }
 
-        return proper_goal;
+        return los_free_goal;
     }
 
     SFC CollisionConstraints::findProperSFC(const point3d& start_point, const point3d& goal_point){

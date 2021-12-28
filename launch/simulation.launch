@@ -8,7 +8,7 @@
   <arg name="patrol" default="false"/> <!-- Change the mission to patrol between start and goal points -->
 
   <!-- Map -->
-  <arg name="use_octomap" default="true"/> <!-- Use octomap to set obstacle environment, octomap must be stored in lsc_planner/world  -->
+  <arg name="use_octomap" default="false"/> <!-- Use octomap to set obstacle environment, octomap must be stored in lsc_planner/world  -->
   <arg name="world_frame_id" default="world"/> <!-- world frame id used in Rviz -->
   <arg name="world_file_name" default="forest.bt"/> <!-- Octomap file name, it must be bt file -->
   <arg name="world_resolution" default="0.1"/> <!-- Octomap resolution -->
@@ -60,7 +60,7 @@
 
     <!-- Planner mode -->
     <param name="mode/planner" value="lsc" /> <!-- lsc: LSC planner, bvc: Buffered Voronoi Cell planner -->
-    <param name="mode/goal" value="prior_based3" /> <!-- right_hand: use right hand rule, prior_based: use priority-based goal planning -->
+    <param name="mode/goal" value="prior_based4" /> <!-- right_hand: use right hand rule, prior_based: use priority-based goal planning -->
 
     <!-- Trajectory representation -->
     <param name="traj/dt" value="0.2" /> <!-- Segment time, if you use LSC planner then it must be equal to multisim/time_step -->
@@ -98,7 +98,6 @@
 
     <!-- Exploration -->
     <param name="sensor/range" value="1.5" />
-<!--    <remap from="/global_map" to="/octomap_point_cloud_centers"/>-->
   </node>
 
   <node pkg="rviz" type="rviz" name="rviz"

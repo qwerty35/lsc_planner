@@ -91,6 +91,7 @@ namespace DynamicPlanning {
         int planner_seq;
         PlanningStatistics statistics;
         bool initialize_sfc;
+        GoalPlannerState goal_planner_state;
 
 
         // Frequently used constants
@@ -147,6 +148,7 @@ namespace DynamicPlanning {
         void goalPlanningWithPriority();
         void goalPlanningWithPriority2();
         void goalPlanningWithPriority3();
+        void goalPlanningWithPriority4();
         void goalPlanningWithEntropy();
 
         // Obstacle prediction
