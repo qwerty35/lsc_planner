@@ -1,12 +1,51 @@
 #include <mission.hpp>
 
 namespace DynamicPlanning {
-    Mission::Mission(){
+    Mission::Mission(const ros::NodeHandle &nh){
         qn = 0;
         on = 0;
+
+        std::string mission_file_name, world_file_name;
+        nh.param<std::string>("mission", mission_file_name, "default.json");
+        nh.param<std::string>("world/file_name", world_file_name, "default.bt");
+
+        std::string package_path = ros::package::getPath("lsc_planner");
+        if(mission_file_name.find(".json") != std::string::npos){
+            mission_file_names.emplace_back(package_path + "/missions/" + mission_file_name);
+        }
+        else{
+            std::set<std::string> mission_set; // Use set to sort mission by file names
+            std::string current_path = package_path + "/missions/" + mission_file_name;
+            for(const auto& entry : fs::recursive_directory_iterator(current_path)){
+                if(entry.path().string().find(".json") != std::string::npos){
+                    mission_set.emplace(entry.path().string());
+                }
+            }
+
+            for(const auto& file_name : mission_set){
+                mission_file_names.emplace_back(file_name);
+            }
+        }
+
+        if(world_file_name.find(".bt") != std::string::npos){
+            world_file_names.emplace_back(package_path + "/world/" + world_file_name);
+        }
+        else{
+            std::set<std::string> world_set; // Use set to sort world by file names
+            std::string current_path = package_path + "/world/" + world_file_name;
+            for(const auto& entry : fs::recursive_directory_iterator(current_path)){
+                if(entry.path().string().find(".bt") != std::string::npos){
+                    world_set.emplace(entry.path().string());
+                }
+            }
+
+            for(const auto& file_name : world_set){
+                world_file_names.emplace_back(file_name);
+            }
+        }
     }
 
-    Document Mission::readMissionFile(const std::string& file_name) {
+    Document Mission::parseMissionFile(const std::string& file_name) {
         std::ifstream ifs(file_name);
         IStreamWrapper isw(ifs);
         Document document;
@@ -17,16 +56,41 @@ namespace DynamicPlanning {
         return document;
     }
 
-    bool Mission::initialize(const std::string& mission_file_name_, double max_noise, int world_dimension,
-                             double world_z_2d, const std::string& world_file_name_) {
-        mission_file_name = mission_file_name_;
-        world_file_name = world_file_name_;
-        Document document = readMissionFile(mission_file_name_);
+    bool Mission::loadMission(const std::string& mission_file_name, double max_noise, int world_dimension, double world_z_2d){
+        current_mission_file_name = mission_file_name;
+        current_world_file_name = world_file_names[0];
+
+        return readMissionFile(max_noise, world_dimension, world_z_2d);
+    }
+
+
+    bool Mission::loadMission(double max_noise, int world_dimension, double world_z_2d, int mission_idx) {
+        current_mission_file_name = mission_file_names[mission_idx];
+        if(mission_file_names.size() == world_file_names.size()){
+            current_world_file_name = world_file_names[mission_idx];
+        }
+        else{
+            current_world_file_name = world_file_names[0];
+        }
+
+        return readMissionFile(max_noise, world_dimension, world_z_2d);
+    }
+
+    bool Mission::readMissionFile(double max_noise, int world_dimension, double world_z_2d){
+        Document document;
+        try{
+            document = parseMissionFile(current_mission_file_name);
+        }
+        catch(...){
+            ROS_ERROR_STREAM("There is no such mission file " + current_mission_file_name);
+            return false;
+        }
 
         // World
         const Value &world_list = document["world"];
         if(world_list.Size() != 1){
-            throw std::invalid_argument("[Mission] World must have one element");
+            ROS_ERROR("[Mission] World must have one element");
+            return false;
         }
         const Value &dimension = world_list[0].GetObject()["dimension"];
         world_min = point3d(dimension[0].GetDouble(), dimension[1].GetDouble(), dimension[2].GetDouble());
@@ -263,21 +327,6 @@ namespace DynamicPlanning {
                                                                    obs_stddev_acc, obs_max_acc, obs_acc_update_cycle,
                                                                    obs_downwash); //TODO: gamma parameterization
             }
-//            else if(type == "static"){
-//                geometry_msgs::Point obs_pose;
-//                const Value &pose = obstacle_list[oi].GetObject()["pose"];
-//                obs_pose.x = pose[0].GetDouble();
-//                obs_pose.y = pose[1].GetDouble();
-//                obs_pose.z = pose[2].GetDouble();
-//
-//                geometry_msgs::Point obs_dimensions;
-//                const Value &dimensions = obstacle_list[oi].GetObject()["dimensions"];
-//                obs_dimensions.x = dimensions[0].GetDouble();
-//                obs_dimensions.y = dimensions[1].GetDouble();
-//                obs_dimensions.z = dimensions[2].GetDouble();
-//
-//                obstacles[oi] = std::make_shared<StaticObstacle>(obs_pose, obs_dimensions);
-//            }
             else if(type == "bernstein"){
                 std::string traj_csv_path = obstacle_list[oi].GetObject()["traj_csv_path"].GetString();
                 int obs_traj_n = obstacle_list[oi].GetObject()["n"].GetInt();
@@ -319,60 +368,6 @@ namespace DynamicPlanning {
         return true;
     }
 
-    void Mission::generateCircleSwap(double circle_radius, int multisim_qn, double z_2d) {
-        agents.clear();
-        Agent default_agent = defaultAgent();
-        for (int qi = 0; qi < multisim_qn; qi++) {
-            Agent agent = default_agent;
-            agent.id = qi;
-            point3d start_point(circle_radius * std::cos(qi * 2 * PI / multisim_qn),
-                                         circle_radius * std::sin(qi * 2 * PI / multisim_qn),
-                                z_2d);
-            agent.start_position = start_point;
-            agent.desired_goal_position = -start_point;
-            agent.desired_goal_position.z() = z_2d;
-            addAgent(agent);
-        }
-    }
-
-    Agent Mission::defaultAgent() const{
-        Agent default_agent;
-        Document document = readMissionFile(mission_file_name);
-        Value::MemberIterator quadrotor = document["quadrotors"].FindMember("default");
-
-        // radius
-        default_agent.radius = quadrotor->value.GetObject()["size"].GetDouble();
-
-        //downwash
-        default_agent.downwash = quadrotor->value.GetObject()["downwash"].GetDouble();
-        if (default_agent.downwash == 0) {
-            default_agent.downwash = 1.0;
-        }
-
-        // speed
-        default_agent.nominal_velocity = quadrotor->value.GetObject()["speed"].GetDouble();
-        if (default_agent.nominal_velocity == 0) {
-            default_agent.nominal_velocity = 1.0;
-        }
-
-        // maximum velocity, acceleration
-        std::vector<double> dynamic_limit(3, 0);
-        const Value &maxVel = quadrotor->value.GetObject()["max_vel"];
-        for (SizeType i = 0; i < maxVel.Size(); i++) {
-            dynamic_limit[i] = maxVel[i].GetDouble();
-        }
-        default_agent.max_vel = dynamic_limit;
-
-        dynamic_limit.assign(3, 0);
-        const Value &maxAcc = quadrotor->value.GetObject()["max_acc"];
-        for (SizeType i = 0; i < maxAcc.Size(); i++) {
-            dynamic_limit[i] = maxAcc[i].GetDouble();
-        }
-        default_agent.max_acc = dynamic_limit;
-
-        return default_agent;
-    }
-
     void Mission::addAgent(const Agent &agent) {
         agents.emplace_back(agent);
         qn++;
@@ -401,7 +396,7 @@ namespace DynamicPlanning {
     }
 
     void Mission::saveMission(const std::string& file_addr) const {
-        Document document = readMissionFile(mission_file_name);
+        Document document = parseMissionFile(current_mission_file_name);
 
         Value& agents_list = document["agents"];
         Document::AllocatorType& allocator = document.GetAllocator();
@@ -431,7 +426,6 @@ namespace DynamicPlanning {
                 }
             }
         }
-
 
         FILE* fp = fopen(file_addr.c_str(), "w");
 

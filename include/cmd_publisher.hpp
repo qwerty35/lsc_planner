@@ -26,19 +26,19 @@ namespace DynamicPlanning {
         Mission mission;
 
         size_t M, n;
-        double dt;
+        double dt, landing_time;
 
         size_t latest_planner_seq;
         std::queue<std::vector<traj_t>> trajs_queue;
         std::queue<ros::Time> trajs_start_time_queue;
         std::vector<traj_t> current_traj;
-        ros::Time current_traj_start_time;
+        ros::Time current_traj_start_time, stop_planning_time;
         bool stop_planning;
 
         void trajsCallback(const dynamic_msgs::TrajectoryArray& msg_trajs);
         bool stopPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
-        void update_traj();
-        void publish_traj();
+        void updateTraj();
+        void publishCommand();
     };
 }
 

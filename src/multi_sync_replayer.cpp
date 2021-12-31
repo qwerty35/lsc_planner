@@ -2,8 +2,10 @@
 #include <utility>
 
 namespace DynamicPlanning{
-    MultiSyncReplayer::MultiSyncReplayer(const ros::NodeHandle& _nh, Param _param, Mission _mission)
-                : nh(_nh), param(std::move(_param)), mission(std::move(_mission))
+    MultiSyncReplayer::MultiSyncReplayer(const ros::NodeHandle& _nh,
+                                         const Param& _param,
+                                         const Mission& _mission)
+                : nh(_nh), param(_param), mission(_mission), obstacle_generator(_nh, _mission)
     {
         pub_agent_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/agent_trajectories_history", 1);
         pub_obstacle_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_state_history", 1);
@@ -22,8 +24,6 @@ namespace DynamicPlanning{
 
         timeStep = param.multisim_save_time_step;
         makeSpan = SP_INFINITY;
-
-        obstacle_generator.initialize(nh, mission);
     }
 
     void MultiSyncReplayer::initializeReplay() {

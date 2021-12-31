@@ -277,10 +277,8 @@ namespace DynamicPlanning{
         return edges;
     }
 
-    CollisionConstraints::CollisionConstraints(const Param& param_, const Mission& mission_) {
-        param = param_;
-        mission = mission_;
-
+    CollisionConstraints::CollisionConstraints(const Param& param_, const Mission& mission_)
+            : param(param_), mission(mission_){
         M = param.M;
         n = param.n;
         dt = param.dt;
@@ -331,14 +329,14 @@ namespace DynamicPlanning{
     void CollisionConstraints::generateFeasibleSFC(const point3d& last_point, const point3d& current_goal_position,
                                                    const points_t& grid_path, double agent_radius){
         // update sfc library
-        updateSFCLibrary(grid_path, agent_radius);
+        updateSFCLibrary(grid_path, agent_radius); //TODO: duplicated!
 
         // Update sfc for segments m < M-1 from previous sfc
         for(int m = 0; m < M - 1; m++){
             sfcs[m] = sfcs[m + 1];
         }
 
-//        // Find last point is in sfc_library
+        // Find last point is in sfc_library
         SFC sfc_update;
         double min_dist_to_goal = SP_INFINITY;
         for(const auto& sfc : sfc_library){

@@ -3,7 +3,7 @@
 
 namespace DynamicPlanning{
     MultiSyncSimulator::MultiSyncSimulator(const ros::NodeHandle& _nh, Param _param, Mission _mission)
-            : nh(_nh), param(std::move(_param)), mission(std::move(_mission))
+            : nh(_nh), param(std::move(_param)), mission(std::move(_mission)), obstacle_generator(_nh, _mission)
     {
         pub_agent_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/agent_trajectories_history", 1);
         pub_obstacle_trajectories = nh.advertise<visualization_msgs::MarkerArray>("/obstacle_trajectories_history", 1);
@@ -20,7 +20,7 @@ namespace DynamicPlanning{
 //        pub_goal_positions_raw = nh.advertise<dynamic_msgs::GoalArray>("/goal_positions_raw", 1);
         pub_world_boundary = nh.advertise<visualization_msgs::MarkerArray>("/world_boundary", 1);
         pub_collision_alert = nh.advertise<visualization_msgs::MarkerArray>("/collision_alert", 1);
-//        pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
+        pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
         pub_desired_trajs_vis = nh.advertise<visualization_msgs::MarkerArray>("/desired_trajs_vis", 1);
         pub_grid_map = nh.advertise<visualization_msgs::MarkerArray>("/grid_map", 1);
         pub_communication_range = nh.advertise<visualization_msgs::MarkerArray>("/communication_range", 1);
@@ -37,7 +37,6 @@ namespace DynamicPlanning{
 
         sim_start_time = ros::Time::now();
         sim_current_time = sim_start_time;
-        obstacle_generator.initialize(nh, mission);
         obstacle_generator.update(0, 0);
 
         is_collided = false;
@@ -161,13 +160,24 @@ namespace DynamicPlanning{
 //    }
 
     bool MultiSyncSimulator::isPlannerReady() {
-        bool is_planner_ready = planner_state > PlannerState::WAIT;
-
-        if (param.world_use_octomap) {
-            is_planner_ready = is_planner_ready and has_global_map;
+        if(planner_state == PlannerState::WAIT){
+            ROS_INFO_ONCE("[MultiSyncSimulator] Planner ready, wait for start message");
+            return false;
+        }
+        if (param.world_use_octomap and not has_global_map) {
+            ROS_INFO_ONCE("[MultiSyncSimulator] Planner ready, wait for global map");
+            return false;
+        }
+        if (param.multisim_experiment and initial_update){
+            for(const auto& agent : agents){
+                if(not agent->isInitialStateValid()){
+                    ROS_WARN_ONCE("[MultiSyncSimulator] Planner ready, invalid initial state");
+                    return false;
+                }
+            }
         }
 
-        return is_planner_ready;
+        return true;
     }
 
     void MultiSyncSimulator::initializeTimer(){
@@ -180,8 +190,8 @@ namespace DynamicPlanning{
     void MultiSyncSimulator::doStep(){
         sim_current_time += ros::Duration(param.multisim_time_step);
 
-        for(int qi = 0; qi < mission.qn; qi++){
-            agents[qi]->doStep(param.multisim_time_step);
+        for(const auto& agent : agents){
+            agent->doStep(param.multisim_time_step);
         }
     }
 
@@ -545,8 +555,8 @@ namespace DynamicPlanning{
                        << planning_time.lsc_generation_time.average << ","
                        << planning_time.sfc_generation_time.average << ","
                        << planning_time.traj_optimization_time.average << ","
-                       << mission.mission_file_name << ","
-                       << mission.world_file_name << ","
+                       << mission.current_mission_file_name << ","
+                       << mission.current_world_file_name << ","
                        << param.getPlannerModeStr() << ","
                        << param.getPredictionModeStr() << ","
                        << param.getInitialTrajModeStr() << ","
@@ -644,10 +654,10 @@ namespace DynamicPlanning{
 
     bool MultiSyncSimulator::updateGoalCallback(dynamic_msgs::UpdateGoals::Request& req,
                                                 dynamic_msgs::UpdateGoals::Response& res){
-        bool success = (not req.file_name.empty()) and mission.initialize(req.file_name,
-                                                                          param.multisim_max_noise,
-                                                                          param.world_dimension,
-                                                                          param.world_z_2d);
+        bool success = (not req.file_name.empty()) and mission.loadMission(req.file_name,
+                                                                           param.multisim_max_noise,
+                                                                           param.world_dimension,
+                                                                           param.world_z_2d);
         if(success){
             ROS_INFO("Update goal success");
             mission_changed = true;
@@ -849,15 +859,15 @@ namespace DynamicPlanning{
         pub_agent_acc_limits.publish(msg_agent_acc_limits);
     }
     void MultiSyncSimulator::publishDesiredTrajs() {
-//        // Raw
-//        dynamic_msgs::TrajectoryArray msg_desired_trajs_raw;
-//        msg_desired_trajs_raw.header.stamp = sim_current_time;
-//        msg_desired_trajs_raw.planner_seq = agents[0]->getPlannerSeq();
-//        msg_desired_trajs_raw.trajectories.resize(mission.qn);
-//        for(int qi = 0; qi < mission.qn; qi++){
-//            msg_desired_trajs_raw.trajectories[qi] = trajToTrajMsg(agents[qi]->getTraj(), qi, param.dt);
-//        }
-//        pub_desired_trajs_raw.publish(msg_desired_trajs_raw);
+        // Raw
+        dynamic_msgs::TrajectoryArray msg_desired_trajs_raw;
+        msg_desired_trajs_raw.header.stamp = sim_current_time;
+        msg_desired_trajs_raw.trajectories.resize(mission.qn);
+        for(int qi = 0; qi < mission.qn; qi++){
+            msg_desired_trajs_raw.trajectories[qi] = trajToTrajMsg(agents[qi]->getTraj(), qi, param.dt);
+            msg_desired_trajs_raw.trajectories[qi].planner_seq = agents[qi]->getPlannerSeq();
+        }
+        pub_desired_trajs_raw.publish(msg_desired_trajs_raw);
 
         // Vis
         visualization_msgs::MarkerArray msg_desired_trajs_vis;

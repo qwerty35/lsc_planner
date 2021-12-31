@@ -20,6 +20,8 @@ namespace DynamicPlanning {
 
         void mergeMapCallback(const octomap_msgs::Octomap& msg_merge_map);
 
+        bool isInitialStateValid();
+
         // Setter
         void setCurrentState(const dynamic_msgs::State& msg_current_state);
 
@@ -42,6 +44,8 @@ namespace DynamicPlanning {
 
         [[nodiscard]] traj_t getTraj() const;
 
+        [[nodiscard]] int getPlannerSeq() const;
+
         [[nodiscard]] point3d getCurrentGoalPosition() const;
 
         [[nodiscard]] point3d getDesiredGoalPosition() const;
@@ -57,7 +61,7 @@ namespace DynamicPlanning {
 
         // Flags, states
         PlannerState planner_state;
-        bool has_current_state, has_obstacles, has_local_map;
+        bool has_current_state, has_obstacles, has_local_map, is_disturbed;
 
         // Agent
         Agent agent;
@@ -67,7 +71,9 @@ namespace DynamicPlanning {
         std::unique_ptr<TrajPlanner> traj_planner;
         std::unique_ptr<MapManager> map_manager;
 
-        void setDesiredGoalByState();
+        void stateTransition();
+
+        bool observeCurrentPosition(point3d& observed_position);
     };
 }
 

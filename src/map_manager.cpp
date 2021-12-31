@@ -1,10 +1,8 @@
 #include "map_manager.hpp"
 
 namespace DynamicPlanning {
-    MapManager::MapManager(const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission, int agent_id) {
-        nh = _nh;
-        param = _param;
-        mission = _mission;
+    MapManager::MapManager(const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission, int agent_id)
+        : nh(_nh), param(_param), mission(_mission) {
         agent_frame_id = "mav" + std::to_string(agent_id);
         world_frame_id = param.world_frame_id;
 

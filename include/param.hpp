@@ -3,20 +3,15 @@
 #include <ros/package.h>
 #include <sp_const.hpp>
 #include <string>
-#include <experimental/filesystem>
-
-namespace fs = std::experimental::filesystem;
 
 namespace DynamicPlanning{
     class Param {
     public:
         bool log;
         std::string package_path;
-        std::vector<std::string> mission_file_names;
 
         // World
         std::string world_frame_id;
-        std::vector<std::string> world_file_names;
         int world_dimension;
         bool world_use_octomap;
         double world_resolution;

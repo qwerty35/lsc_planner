@@ -11,7 +11,7 @@
 namespace DynamicPlanning {
     class MultiSyncReplayer {
     public:
-        MultiSyncReplayer(const ros::NodeHandle& _nh, Param _param, Mission _mission);
+        MultiSyncReplayer(const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission);
 
         void initializeReplay();
 

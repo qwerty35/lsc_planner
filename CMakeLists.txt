@@ -146,6 +146,7 @@ add_executable(cmd_publisher_node
 add_dependencies(cmd_publisher_node ${catkin_EXPORTED_TARGETS})
 target_link_libraries(cmd_publisher_node
   ${catkin_LIBRARIES}
+  stdc++fs
 )
 
 #add_executable(multi_sync_debugger_node

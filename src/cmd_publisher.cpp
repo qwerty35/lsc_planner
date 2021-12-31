@@ -3,6 +3,7 @@
 namespace DynamicPlanning {
     CmdPublisher::CmdPublisher(const ros::NodeHandle &_nh, Mission _mission) : nh(_nh), mission(std::move(_mission))
     {
+        nh.param<double>("landing_time", landing_time, 5.0);
         sub_desired_trajs = nh.subscribe("/desired_trajs_raw", 1, &CmdPublisher::trajsCallback, this);
         service_stop_planning = nh.advertiseService("/stop_planning", &CmdPublisher::stopPlanningCallback, this);
 
@@ -20,12 +21,13 @@ namespace DynamicPlanning {
     }
 
     void CmdPublisher::run() {
-        update_traj();
-        publish_traj();
+        updateTraj();
+        publishCommand();
     }
 
     void CmdPublisher::trajsCallback(const dynamic_msgs::TrajectoryArray& msg_trajs) {
-        if(msg_trajs.planner_seq <= latest_planner_seq) {
+        //TODO: available only when sync planning!
+        if(msg_trajs.trajectories[0].planner_seq <= latest_planner_seq) {
             return; // msg not updated
         }
 
@@ -39,7 +41,7 @@ namespace DynamicPlanning {
             dt = msg_trajs.trajectories[0].param.dt;
         }
 
-        latest_planner_seq = msg_trajs.planner_seq;
+        latest_planner_seq = msg_trajs.trajectories[0].planner_seq;
 
         std::vector<traj_t> desired_trajs;
         desired_trajs.resize(mission.qn);
@@ -53,10 +55,11 @@ namespace DynamicPlanning {
 
     bool CmdPublisher::stopPlanningCallback(std_srvs::Empty::Request &req, std_srvs::Empty::Response &res) {
         stop_planning = true;
+        stop_planning_time = ros::Time::now();
         return true;
     }
 
-    void CmdPublisher::update_traj(){
+    void CmdPublisher::updateTraj(){
         if(trajs_queue.empty()){
             return;
         }
@@ -70,17 +73,27 @@ namespace DynamicPlanning {
         }
     }
 
-    void CmdPublisher::publish_traj(){
-        if(current_traj.empty() or stop_planning){
-            return;
-        }
-
-        double t = (ros::Time::now() - current_traj_start_time).toSec();
-        if(t < 0){
-            return;
-        }
-
+    void CmdPublisher::publishCommand(){
         visualization_msgs::MarkerArray msg_cmd_vis;
+
+        // Check current trajectory is received
+        if(current_traj.empty()){
+            return;
+        }
+
+        // time
+        double t, t_stop;
+        if(stop_planning){
+            t = (stop_planning_time - current_traj_start_time).toSec();
+            t_stop = (ros::Time::now() - stop_planning_time).toSec();
+        }
+        else{
+            t = (ros::Time::now() - current_traj_start_time).toSec();
+        }
+        if(t < 0 or t_stop > landing_time){
+            return;
+        }
+
         for(int qi = 0; qi < mission.qn; qi++){
             dynamic_msgs::State desired_state;
             if(t > M * dt){
@@ -88,10 +101,17 @@ namespace DynamicPlanning {
                 desired_state.velocity.linear = defaultVector();
                 desired_state.velocity.angular = defaultVector();
                 desired_state.acceleration.linear = defaultVector();
-                desired_state.acceleration.linear = defaultVector();
             }
             else{
                 desired_state = getStateFromControlPoints(current_traj[qi], t, M, n, dt);
+            }
+
+            if(stop_planning) {
+                desired_state.pose.position.z =
+                        0.01 + (desired_state.pose.position.z - 0.01) * std::max(1 - t_stop / landing_time, 0.0);
+                desired_state.velocity.linear = defaultVector();
+                desired_state.velocity.angular = defaultVector();
+                desired_state.acceleration.linear = defaultVector();
             }
 
             // command for crazyflie

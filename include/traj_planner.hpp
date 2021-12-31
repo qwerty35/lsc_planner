@@ -53,7 +53,8 @@ namespace DynamicPlanning {
         traj_t plan(const Agent& agent,
                     const std::shared_ptr<octomap::OcTree>& octree_ptr,
                     const std::shared_ptr<DynamicEDTOctomap>& distmap_ptr,
-                    ros::Time sim_current_time);
+                    ros::Time sim_current_time,
+                    bool is_disturbed);
 
         void publish();
 
@@ -63,6 +64,8 @@ namespace DynamicPlanning {
         void setObstacles(const dynamic_msgs::ObstacleArray &msg_obstacles);
 
         // Getter
+        [[nodiscard]] int getPlannerSeq() const;
+
         [[nodiscard]] point3d getCurrentGoalPosition() const;
 
         [[nodiscard]] point3d getAgentORCAVelocity() const;
@@ -90,9 +93,8 @@ namespace DynamicPlanning {
         Agent agent;
         int planner_seq;
         PlanningStatistics statistics;
-        bool initialize_sfc;
+        bool initialize_sfc, is_disturbed;
         GoalPlannerState goal_planner_state;
-
 
         // Frequently used constants
         int M, n;

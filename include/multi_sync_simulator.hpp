@@ -44,7 +44,7 @@ namespace DynamicPlanning {
         ros::Publisher pub_agent_acc_limits;
         ros::Publisher pub_world_boundary;
         ros::Publisher pub_collision_alert;
-//        ros::Publisher pub_desired_trajs_raw;
+        ros::Publisher pub_desired_trajs_raw;
         ros::Publisher pub_desired_trajs_vis;
         ros::Publisher pub_grid_map;
         ros::Publisher pub_communication_range;

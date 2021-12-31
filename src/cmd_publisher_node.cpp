@@ -7,11 +7,8 @@ int main(int argc, char* argv[]){
     ros::init (argc, argv, "cmd_publisher_node");
     ros::NodeHandle nh( "~" );
 
-    std::string file_name;
-    nh.param<std::string>("mission", file_name, "default.json");
-
-    Mission mission;
-    if (not mission.initialize(file_name, 0, 3)) {
+    Mission mission(nh);
+    if (not mission.loadMission(0, 3)) {
         return -1;
     }
 

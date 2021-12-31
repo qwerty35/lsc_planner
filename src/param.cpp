@@ -2,13 +2,10 @@
 
 namespace DynamicPlanning {
     bool Param::initialize(const ros::NodeHandle &nh) {
-        std::string mission_file_name, world_file_name;
-        nh.param<std::string>("mission", mission_file_name, "default.json");
         nh.param<bool>("log", log, false);
 
         // World
         nh.param<std::string>("world/frame_id", world_frame_id, "world");
-        nh.param<std::string>("world/file_name", world_file_name, "default.bt");
         nh.param<int>("world/dimension", world_dimension, 3);
         nh.param<bool>("world/use_octomap", world_use_octomap, false);
         nh.param<double>("world/resolution", world_resolution, 0.1);
@@ -121,44 +118,7 @@ namespace DynamicPlanning {
         // Exploration
         nh.param<double>("sensor/range", sensor_range, 3.0);
 
-
         package_path = ros::package::getPath("lsc_planner");
-
-        if(mission_file_name.find(".json") != std::string::npos){
-            mission_file_names.emplace_back(package_path + "/missions/" + mission_file_name);
-        }
-        else{
-            std::set<std::string> mission_set;
-            std::string current_path = package_path + "/missions/" + mission_file_name;
-            for(const auto& entry : fs::recursive_directory_iterator(current_path)){
-                if(entry.path().string().find(".json") != std::string::npos){
-                    mission_set.emplace(entry.path().string());
-                }
-            }
-
-            for(const auto& file_name : mission_set){
-                mission_file_names.emplace_back(file_name);
-            }
-        }
-
-        if(world_use_octomap){
-            if(world_file_name.find(".bt") != std::string::npos){
-                world_file_names.emplace_back(package_path + "/world/" + world_file_name);
-            }
-            else{
-                std::set<std::string> world_set;
-                std::string current_path = package_path + "/world/" + world_file_name;
-                for(const auto& entry : fs::recursive_directory_iterator(current_path)){
-                    if(entry.path().string().find(".bt") != std::string::npos){
-                        world_set.emplace(entry.path().string());
-                    }
-                }
-
-                for(const auto& file_name : world_set){
-                    world_file_names.emplace_back(file_name);
-                }
-            }
-        }
 
         return true;
     }
