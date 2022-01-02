@@ -50,6 +50,7 @@ namespace DynamicPlanning {
         ros::Publisher pub_communication_range;
         ros::Subscriber sub_global_map;
         ros::ServiceServer service_start_planning;
+        ros::ServiceServer service_stop_planning;
         ros::ServiceServer service_start_patrol;
         ros::ServiceServer service_stop_patrol;
         ros::ServiceServer service_update_goal;
@@ -86,7 +87,7 @@ namespace DynamicPlanning {
 
         void summarizeResult();
 
-        void initializeTimer();
+        void initializeSimTime();
 
         void setObstacles(int qi, const dynamic_msgs::ObstacleArray& dynamic_obstacles);
 
@@ -103,6 +104,8 @@ namespace DynamicPlanning {
         void globalMapCallback(const sensor_msgs::PointCloud2& pointcloud_map);
 
         bool startPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
+
+        bool stopPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
 
         bool startPatrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
 

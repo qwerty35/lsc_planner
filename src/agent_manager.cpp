@@ -21,6 +21,9 @@ namespace DynamicPlanning {
 
         //Map manager
         map_manager = std::make_unique<MapManager>(nh, param, mission, agent_id);
+
+        // Command publisher
+        cmd_publisher = std::make_unique<CmdPublisher>(nh, param, mission, agent_id);
     }
 
     void AgentManager::doStep(double time_step) {
@@ -40,7 +43,6 @@ namespace DynamicPlanning {
         // else use current_state
         double diff = observed_position.distance(ideal_current_position);
         ROS_INFO_STREAM("diff: " << diff);
-
         if ((not is_disturbed and diff > param.reset_threshold) or
             (is_disturbed and diff > param.reset_threshold / 3)) {
             agent.current_state.position = observed_position;
@@ -73,15 +75,23 @@ namespace DynamicPlanning {
             return PlanningReport::WAITFORROSMSG;
         }
 
-        // change desired goal position by the agent's state
-        stateTransition();
+        if(planner_state == PlannerState::STOP){
+            cmd_publisher->stopPlanningCallback();
+        }
+        else{
+            // change desired goal position by the agent's state
+            stateTransition();
 
-        // Start planning
-        desired_traj = traj_planner->plan(agent,
-                                          map_manager->getOctomap(),
-                                          map_manager->getDistmap(),
-                                          sim_current_time,
-                                          is_disturbed);
+            // Start planning
+            desired_traj = traj_planner->plan(agent,
+                                              map_manager->getOctomap(),
+                                              map_manager->getDistmap(),
+                                              sim_current_time,
+                                              is_disturbed);
+
+            // Update trajectory in Command publisher
+            cmd_publisher->updateTraj(desired_traj, sim_current_time, is_disturbed);
+        }
 
         // Re-initialization for replanning
         has_obstacles = false;
@@ -214,7 +224,7 @@ namespace DynamicPlanning {
     }
 
     void AgentManager::stateTransition() {
-        if (planner_state == GOTO) {
+        if (planner_state == PlannerState::GOTO) {
             agent.desired_goal_position = mission.agents[agent.id].desired_goal_position;
         } else if (planner_state == PlannerState::PATROL and
                    agent.desired_goal_position.distance(agent.current_state.position) < param.goal_threshold) {
@@ -226,6 +236,8 @@ namespace DynamicPlanning {
             // Go back to start position
             agent.desired_goal_position = mission.agents[agent.id].start_position;
         }
+
+        // if planner_state == PlannerState::WAIT, use previous desired goal position
     }
 
     bool AgentManager::observeCurrentPosition(point3d &observed_position) {

@@ -114,6 +114,7 @@ set(LSC_PLANNER_SRC
   src/grid_based_planner.cpp
   src/collision_constraints.cpp
   src/map_manager.cpp
+  src/cmd_publisher.cpp
   ${RVO2_2D_SRC}
   ${RVO2_3D_SRC}
   ${Astar_3D_SRC}
@@ -138,16 +139,16 @@ target_link_libraries(multi_sync_simulator_node
   stdc++fs
 )
 
-add_executable(cmd_publisher_node
-  src/cmd_publisher.cpp
-  src/cmd_publisher_node.cpp
-  src/mission.cpp
-)
-add_dependencies(cmd_publisher_node ${catkin_EXPORTED_TARGETS})
-target_link_libraries(cmd_publisher_node
-  ${catkin_LIBRARIES}
-  stdc++fs
-)
+#add_executable(cmd_publisher_node
+#  src/cmd_publisher.cpp
+#  src/cmd_publisher_node.cpp
+#  src/mission.cpp
+#)
+#add_dependencies(cmd_publisher_node ${catkin_EXPORTED_TARGETS})
+#target_link_libraries(cmd_publisher_node
+#  ${catkin_LIBRARIES}
+#  stdc++fs
+#)
 
 #add_executable(multi_sync_debugger_node
 #  src/multi_sync_debugger_node.cpp

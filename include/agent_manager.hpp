@@ -3,6 +3,7 @@
 
 #include <traj_planner.hpp>
 #include <map_manager.hpp>
+#include <cmd_publisher.hpp>
 #include <tf/transform_listener.h>
 
 namespace DynamicPlanning {
@@ -70,6 +71,7 @@ namespace DynamicPlanning {
         //Traj Planner
         std::unique_ptr<TrajPlanner> traj_planner;
         std::unique_ptr<MapManager> map_manager;
+        std::unique_ptr<CmdPublisher> cmd_publisher;
 
         void stateTransition();
 

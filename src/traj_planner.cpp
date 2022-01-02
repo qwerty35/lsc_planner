@@ -843,25 +843,31 @@ namespace DynamicPlanning {
 //            }
         }
 
-        // A* considering priority
-        GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
-        grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
-                                            agent.id, agent.radius, agent.downwash,
-                                            obstacles, grid_obstacles);
-
-        if(grid_path.empty()) {
-            // A* without priority
+        point3d los_free_goal;
+        if(param.world_use_octomap) {
+            // A* considering priority
+            GridBasedPlanner grid_based_planner(distmap_ptr, mission, param);
             grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
                                                 agent.id, agent.radius, agent.downwash,
-                                                obstacles);
-        }
+                                                obstacles, grid_obstacles);
 
-        // Find los-free goal from end of the initial trajectory
-        grid_path.emplace_back(agent.desired_goal_position);
-        constraints.updateSFCLibrary(grid_path, agent.radius);
-        point3d los_free_goal = constraints.findLOSFreeGoal(initial_traj[M - 1][n],
-                                                            agent.desired_goal_position,
-                                                            grid_path);
+            if (grid_path.empty()) {
+                // A* without priority
+                grid_path = grid_based_planner.plan(agent.current_state.position, agent.desired_goal_position,
+                                                    agent.id, agent.radius, agent.downwash,
+                                                    obstacles);
+            }
+
+            // Find los-free goal from end of the initial trajectory
+            grid_path.emplace_back(agent.desired_goal_position);
+            constraints.updateSFCLibrary(grid_path, agent.radius);
+            los_free_goal = constraints.findLOSFreeGoal(initial_traj[M - 1][n],
+                                                                agent.desired_goal_position,
+                                                                grid_path);
+        }
+        else{
+            los_free_goal = agent.desired_goal_position;
+        }
 
         if(goal_planner_state == GoalPlannerState::FORWARD){
             for(int oi = 0; oi < obstacles.size(); oi++){

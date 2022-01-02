@@ -83,6 +83,7 @@ namespace DynamicPlanning {
         GOTO,
         PATROL,
         GOBACK,
+        STOP,
     };
 
     enum PlanningReport {

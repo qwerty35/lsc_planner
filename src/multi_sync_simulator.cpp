@@ -26,6 +26,7 @@ namespace DynamicPlanning{
         pub_communication_range = nh.advertise<visualization_msgs::MarkerArray>("/communication_range", 1);
         sub_global_map = nh.subscribe( "/octomap_point_cloud_centers", 1, &MultiSyncSimulator::globalMapCallback, this);
         service_start_planning = nh.advertiseService("/start_planning", &MultiSyncSimulator::startPlanningCallback, this);
+        service_stop_planning = nh.advertiseService("/stop_planning", &MultiSyncSimulator::stopPlanningCallback, this);
         service_start_patrol = nh.advertiseService("/start_patrol", &MultiSyncSimulator::startPatrolCallback, this);
         service_stop_patrol = nh.advertiseService("/stop_patrol", &MultiSyncSimulator::stopPatrolCallback, this);
         service_update_goal = nh.advertiseService("/update_goal", &MultiSyncSimulator::updateGoalCallback, this);
@@ -86,7 +87,6 @@ namespace DynamicPlanning{
 
             // Wait until map is loaded and start signal is arrived
             if(not isPlannerReady()) {
-                ROS_INFO_ONCE("[MultiSyncSimulator] Planner ready, wait for message");
                 ros::Rate(10).sleep();
                 iter--;
                 continue;
@@ -110,7 +110,7 @@ namespace DynamicPlanning{
             }
 
             if(initial_update){
-                initializeTimer();
+                initializeSimTime();
             } else if (param.multisim_experiment and (sim_current_time - ros::Time::now()).toSec() > 0) {
                 // Wait until next planning period
                 // Note: planning_start_time = traj_start_time - multisim_time_step
@@ -136,6 +136,7 @@ namespace DynamicPlanning{
             if (param.multisim_experiment) {
                 double timing_margin = (sim_current_time - ros::Time::now()).toSec();
                 if (timing_margin < 0) {
+                    //TODO: use prev sol when timing margin < 0
                     ROS_WARN_STREAM("[MultiSyncSimulator] Planning speed is too slow! Delay time: " << timing_margin);
                 }
             } else if (param.multisim_planning_rate > 0) {
@@ -144,23 +145,8 @@ namespace DynamicPlanning{
         }
     }
 
-//    void MultiSyncSimulator::setDistmap(const std::string& file_name){
-//        float max_dist = 1.0; //TODO: parameterization
-//        octomap::OcTree* octree_ptr;
-//        octree_ptr = new octomap::OcTree(param.world_resolution);
-//        if(!octree_ptr->readBinary(file_name)){
-//            throw std::invalid_argument("[MultiSyncSimulator] Fail to read octomap file.");
-//        }
-//
-//        distmap_ptr = std::make_shared<DynamicEDTOctomap>(max_dist, octree_ptr, mission.world_min, mission.world_max,
-//                                                          false);
-//        distmap_ptr->update();
-//
-//        has_distmap = true;
-//    }
-
     bool MultiSyncSimulator::isPlannerReady() {
-        if(planner_state == PlannerState::WAIT){
+        if(planner_state == PlannerState::WAIT or planner_state == PlannerState::STOP){
             ROS_INFO_ONCE("[MultiSyncSimulator] Planner ready, wait for start message");
             return false;
         }
@@ -180,7 +166,7 @@ namespace DynamicPlanning{
         return true;
     }
 
-    void MultiSyncSimulator::initializeTimer(){
+    void MultiSyncSimulator::initializeSimTime(){
         // Initialize planner timing
         // To match the simulation time and real world time, add one time step to simulation time.
         sim_start_time = ros::Time::now() + ros::Duration(param.multisim_time_step);
@@ -639,6 +625,11 @@ namespace DynamicPlanning{
 
     bool MultiSyncSimulator::startPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
         planner_state = PlannerState::GOTO;
+        return true;
+    }
+
+    bool MultiSyncSimulator::stopPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
+        planner_state = PlannerState::STOP;
         return true;
     }
 
