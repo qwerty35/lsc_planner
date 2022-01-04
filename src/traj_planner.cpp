@@ -19,6 +19,7 @@ namespace DynamicPlanning {
         // Initialize planner state
         planner_seq = 0;
         initialize_sfc = true;
+        is_disturbed = false;
         prior_obs_id = -1;
         goal_planner_state = GoalPlannerState::FORWARD;
 

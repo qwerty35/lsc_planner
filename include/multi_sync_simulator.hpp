@@ -44,16 +44,16 @@ namespace DynamicPlanning {
         ros::Publisher pub_agent_acc_limits;
         ros::Publisher pub_world_boundary;
         ros::Publisher pub_collision_alert;
-        ros::Publisher pub_desired_trajs_raw;
+//        ros::Publisher pub_desired_trajs_raw;
         ros::Publisher pub_desired_trajs_vis;
         ros::Publisher pub_grid_map;
         ros::Publisher pub_communication_range;
         ros::Subscriber sub_global_map;
         ros::ServiceServer service_start_planning;
-        ros::ServiceServer service_stop_planning;
-        ros::ServiceServer service_start_patrol;
+        ros::ServiceServer service_land;
+        ros::ServiceServer service_patrol;
         ros::ServiceServer service_stop_patrol;
-        ros::ServiceServer service_update_goal;
+        ros::ServiceServer service_change_mission;
 
         const Param param;
         Mission mission;
@@ -105,13 +105,13 @@ namespace DynamicPlanning {
 
         bool startPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
 
-        bool stopPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
+        bool landCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
 
-        bool startPatrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
+        bool patrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
 
         bool stopPatrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res);
 
-        bool updateGoalCallback(dynamic_msgs::UpdateGoals::Request& req, dynamic_msgs::UpdateGoals::Response& res);
+        bool changeMissionCallback(dynamic_msgs::UpdateGoals::Request& req, dynamic_msgs::UpdateGoals::Response& res);
 
         void publishCollisionModel();
 

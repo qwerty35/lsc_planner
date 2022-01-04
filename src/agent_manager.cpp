@@ -27,36 +27,25 @@ namespace DynamicPlanning {
     }
 
     void AgentManager::doStep(double time_step) {
-        point3d observed_position, ideal_current_position;
-
-        // Get ideal position
-        ideal_current_position = getCurrentPosition();
-
-        // listen tf and get current position
-        // if there is no external pose update, then use ideal state of agent instead.
-        bool external_pose_update = observeCurrentPosition(observed_position);
-        if (not external_pose_update) {
-            observed_position = ideal_current_position;
-        }
-
-        // if diff between ideal and current position is under threshold, use ideal state
-        // else use current_state
-        double diff = observed_position.distance(ideal_current_position);
-        ROS_INFO_STREAM("diff: " << diff);
-        if ((not is_disturbed and diff > param.reset_threshold) or
-            (is_disturbed and diff > param.reset_threshold / 3)) {
-            agent.current_state.position = observed_position;
+        is_disturbed = cmd_publisher->isDisturbed();
+        if(planner_state == PlannerState::LAND and not cmd_publisher->externalPoseUpdate()){
+            // Use previous position
             agent.current_state.velocity = point3d(0, 0, 0);
             agent.current_state.acceleration = point3d(0, 0, 0);
-            is_disturbed = true;
-        } else {
+        }
+        else if(is_disturbed){
+            agent.current_state.position = cmd_publisher->getObservedPosition();
+            agent.current_state.velocity = point3d(0, 0, 0);
+            agent.current_state.acceleration = point3d(0, 0, 0);
+        }
+        else{
             // Do step here`
             dynamic_msgs::State ideal_future_state = getFutureStateMsg(time_step);
             agent.current_state.position = pointMsgToPoint3d(ideal_future_state.pose.position);
             agent.current_state.velocity = vector3MsgToPoint3d(ideal_future_state.velocity.linear);
             agent.current_state.acceleration = vector3MsgToPoint3d(ideal_future_state.acceleration.linear);
-            is_disturbed = false;
         }
+
         if (param.world_dimension == 2) {
             agent.current_state.position.z() = (float) param.world_z_2d;
         }
@@ -75,12 +64,16 @@ namespace DynamicPlanning {
             return PlanningReport::WAITFORROSMSG;
         }
 
-        if(planner_state == PlannerState::STOP){
-            cmd_publisher->stopPlanningCallback();
+        if(planner_state == PlannerState::LAND){
+            cmd_publisher->landingCallback();
         }
         else{
             // change desired goal position by the agent's state
-            stateTransition();
+            planningStateTransition();
+
+            if(is_disturbed){
+                ROS_WARN_STREAM("[AgentManager] agent " << agent.id << " disturbance detected");
+            }
 
             // Start planning
             desired_traj = traj_planner->plan(agent,
@@ -90,7 +83,7 @@ namespace DynamicPlanning {
                                               is_disturbed);
 
             // Update trajectory in Command publisher
-            cmd_publisher->updateTraj(desired_traj, sim_current_time, is_disturbed);
+            cmd_publisher->updateTraj(desired_traj, sim_current_time);
         }
 
         // Re-initialization for replanning
@@ -117,8 +110,8 @@ namespace DynamicPlanning {
     bool AgentManager::isInitialStateValid() {
         bool is_valid;
         point3d observed_position;
-        bool success = observeCurrentPosition(observed_position);
-        if (success) {
+        if (cmd_publisher->externalPoseUpdate()) {
+            observed_position = cmd_publisher->getObservedPosition();
             double dist = observed_position.distance(agent.current_state.position);
             is_valid = dist < param.reset_threshold;
             if (not is_valid) {
@@ -146,8 +139,12 @@ namespace DynamicPlanning {
         has_current_state = true;
     }
 
-    void AgentManager::setPlannerState(const PlannerState &_planner_state) {
-        planner_state = _planner_state;
+    void AgentManager::setPlannerState(const PlannerState &new_planner_state) {
+        if(planner_state == PlannerState::LAND and not cmd_publisher->landingFinished()){
+            return;
+        }
+
+        planner_state = new_planner_state;
     }
 
     void AgentManager::setStartPosition(const point3d &_start_position) {
@@ -223,7 +220,7 @@ namespace DynamicPlanning {
         return map_manager->getOctomapMsg();
     }
 
-    void AgentManager::stateTransition() {
+    void AgentManager::planningStateTransition() {
         if (planner_state == PlannerState::GOTO) {
             agent.desired_goal_position = mission.agents[agent.id].desired_goal_position;
         } else if (planner_state == PlannerState::PATROL and
@@ -238,21 +235,5 @@ namespace DynamicPlanning {
         }
 
         // if planner_state == PlannerState::WAIT, use previous desired goal position
-    }
-
-    bool AgentManager::observeCurrentPosition(point3d &observed_position) {
-        bool success = true;
-        tf::StampedTransform transform;
-        try {
-            tf_listener.lookupTransform(param.world_frame_id, "/cf" + std::to_string(agent.cid),
-                                        ros::Time(0), transform);
-            observed_position = vector3MsgToPoint3d(transform.getOrigin());
-        }
-        catch (tf::TransformException &ex) {
-            ROS_WARN_ONCE("[MultiSyncSimulator] tf listener failed, use ideal state instead.");
-            success = false;
-        }
-
-        return success;
     }
 }

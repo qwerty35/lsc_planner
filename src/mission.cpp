@@ -56,10 +56,26 @@ namespace DynamicPlanning {
         return document;
     }
 
-    bool Mission::loadMission(const std::string& mission_file_name, double max_noise, int world_dimension, double world_z_2d){
-        current_mission_file_name = mission_file_name;
-        current_world_file_name = world_file_names[0];
+    bool Mission::changeMission(const std::string& new_mission, double max_noise, int world_dimension, double world_z_2d){
+        std::string package_path = ros::package::getPath("lsc_planner");
+        std::string new_mission_file_name = package_path + "/missions/" + new_mission;
 
+        try{
+            Document document = parseMissionFile(new_mission_file_name);
+            const Value &agents_list = document["agents"];
+            size_t new_qn = agents_list.Size();
+            if(qn != new_qn){
+                ROS_ERROR_STREAM("The number of agents is not matched, prev: " << qn << ", new: " << new_qn);
+                return false;
+            }
+        }
+        catch(...){
+            ROS_ERROR_STREAM("There is no such mission file " + new_mission_file_name);
+            return false;
+        }
+
+        current_mission_file_name = new_mission_file_name;
+        current_world_file_name = world_file_names[0];
         return readMissionFile(max_noise, world_dimension, world_z_2d);
     }
 

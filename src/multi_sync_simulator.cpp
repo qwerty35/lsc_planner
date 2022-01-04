@@ -20,16 +20,16 @@ namespace DynamicPlanning{
 //        pub_goal_positions_raw = nh.advertise<dynamic_msgs::GoalArray>("/goal_positions_raw", 1);
         pub_world_boundary = nh.advertise<visualization_msgs::MarkerArray>("/world_boundary", 1);
         pub_collision_alert = nh.advertise<visualization_msgs::MarkerArray>("/collision_alert", 1);
-        pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
+//        pub_desired_trajs_raw = nh.advertise<dynamic_msgs::TrajectoryArray>("/desired_trajs_raw", 1);
         pub_desired_trajs_vis = nh.advertise<visualization_msgs::MarkerArray>("/desired_trajs_vis", 1);
         pub_grid_map = nh.advertise<visualization_msgs::MarkerArray>("/grid_map", 1);
         pub_communication_range = nh.advertise<visualization_msgs::MarkerArray>("/communication_range", 1);
         sub_global_map = nh.subscribe( "/octomap_point_cloud_centers", 1, &MultiSyncSimulator::globalMapCallback, this);
         service_start_planning = nh.advertiseService("/start_planning", &MultiSyncSimulator::startPlanningCallback, this);
-        service_stop_planning = nh.advertiseService("/stop_planning", &MultiSyncSimulator::stopPlanningCallback, this);
-        service_start_patrol = nh.advertiseService("/start_patrol", &MultiSyncSimulator::startPatrolCallback, this);
+        service_land = nh.advertiseService("/stop_planning", &MultiSyncSimulator::landCallback, this);
+        service_patrol = nh.advertiseService("/start_patrol", &MultiSyncSimulator::patrolCallback, this);
         service_stop_patrol = nh.advertiseService("/stop_patrol", &MultiSyncSimulator::stopPatrolCallback, this);
-        service_update_goal = nh.advertiseService("/update_goal", &MultiSyncSimulator::updateGoalCallback, this);
+        service_change_mission = nh.advertiseService("/change_mission", &MultiSyncSimulator::changeMissionCallback, this);
 
         msg_agent_trajectories.markers.clear();
         msg_agent_trajectories.markers.resize(mission.qn);
@@ -100,6 +100,7 @@ namespace DynamicPlanning{
                 if(param.multisim_experiment){
                     // Wait for another mission
                     planner_state = PlannerState::WAIT;
+                    iter = 0;
                     initial_update = true;
                     continue;
                 }
@@ -111,11 +112,12 @@ namespace DynamicPlanning{
 
             if(initial_update){
                 initializeSimTime();
+                initial_update = false;
             } else if (param.multisim_experiment and (sim_current_time - ros::Time::now()).toSec() > 0) {
                 // Wait until next planning period
                 // Note: planning_start_time = traj_start_time - multisim_time_step
                 continue;
-            } else {
+            } else{
                 doStep();
             }
 
@@ -146,10 +148,11 @@ namespace DynamicPlanning{
     }
 
     bool MultiSyncSimulator::isPlannerReady() {
-        if(planner_state == PlannerState::WAIT or planner_state == PlannerState::STOP){
+        if(planner_state == PlannerState::WAIT){
             ROS_INFO_ONCE("[MultiSyncSimulator] Planner ready, wait for start message");
             return false;
         }
+
         if (param.world_use_octomap and not has_global_map) {
             ROS_INFO_ONCE("[MultiSyncSimulator] Planner ready, wait for global map");
             return false;
@@ -158,6 +161,7 @@ namespace DynamicPlanning{
             for(const auto& agent : agents){
                 if(not agent->isInitialStateValid()){
                     ROS_WARN_ONCE("[MultiSyncSimulator] Planner ready, invalid initial state");
+                    planner_state = PlannerState::WAIT;
                     return false;
                 }
             }
@@ -230,9 +234,6 @@ namespace DynamicPlanning{
             }
         }
 
-        if (initial_update) {
-            initial_update = false;
-        }
         if (mission_changed) {
             mission_changed = false;
         }
@@ -249,9 +250,11 @@ namespace DynamicPlanning{
         }
 
         // save planning result
-        savePlanningResult();
-        if(param.multisim_save_result){
-            savePlanningResultAsCSV();
+        if(planner_state != PlannerState::LAND){
+            savePlanningResult();
+            if(param.multisim_save_result){
+                savePlanningResultAsCSV();
+            }
         }
 
         return true;
@@ -269,7 +272,9 @@ namespace DynamicPlanning{
         }
         obstacle_generator.publish();
         publishAgentState();
-        publishDesiredTrajs();
+        if(planner_state != PlannerState::LAND){
+            publishDesiredTrajs();
+        }
 //        publishGridMap();
         if(param.communication_range > 0){
             publishCommunicationRange();
@@ -277,7 +282,7 @@ namespace DynamicPlanning{
     }
 
     bool MultiSyncSimulator::isFinished(){
-        if(planner_state == PlannerState::PATROL){
+        if(planner_state == PlannerState::PATROL or planner_state == PlannerState::LAND){
             return false;
         }
 
@@ -625,39 +630,41 @@ namespace DynamicPlanning{
 
     bool MultiSyncSimulator::startPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
         planner_state = PlannerState::GOTO;
+        ROS_INFO("[MultiSyncSimulator] Start planning");
         return true;
     }
 
-    bool MultiSyncSimulator::stopPlanningCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
-        planner_state = PlannerState::STOP;
+    bool MultiSyncSimulator::landCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
+        planner_state = PlannerState::LAND;
+        ROS_INFO("[MultiSyncSimulator] Land");
         return true;
     }
 
-    bool MultiSyncSimulator::startPatrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
+    bool MultiSyncSimulator::patrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
         planner_state = PlannerState::PATROL;
+        ROS_INFO("[MultiSyncSimulator] Patrol");
         return true;
     }
 
     bool MultiSyncSimulator::stopPatrolCallback(std_srvs::Empty::Request& req, std_srvs::Empty::Response& res){
         planner_state = GOBACK;
+        ROS_INFO("[MultiSyncSimulator] Back to start position");
         return true;
     }
 
-    bool MultiSyncSimulator::updateGoalCallback(dynamic_msgs::UpdateGoals::Request& req,
-                                                dynamic_msgs::UpdateGoals::Response& res){
-        bool success = (not req.file_name.empty()) and mission.loadMission(req.file_name,
-                                                                           param.multisim_max_noise,
-                                                                           param.world_dimension,
-                                                                           param.world_z_2d);
-        if(success){
-            ROS_INFO("Update goal success");
-            mission_changed = true;
-        }
-        else{
-            ROS_ERROR("Failed to update goal, invalid filename");
+    bool MultiSyncSimulator::changeMissionCallback(dynamic_msgs::UpdateGoals::Request& req,
+                                                   dynamic_msgs::UpdateGoals::Response& res){
+        bool success = (not req.file_name.empty()) and mission.changeMission(req.file_name,
+                                                                             param.multisim_max_noise,
+                                                                             param.world_dimension,
+                                                                             param.world_z_2d);
+        if(not success){
+            ROS_ERROR("Fail to change mission, invalid filename");
             return false;
         }
 
+        ROS_INFO("Change mission success");
+        mission_changed = true;
         return true;
     }
 
@@ -850,15 +857,15 @@ namespace DynamicPlanning{
         pub_agent_acc_limits.publish(msg_agent_acc_limits);
     }
     void MultiSyncSimulator::publishDesiredTrajs() {
-        // Raw
-        dynamic_msgs::TrajectoryArray msg_desired_trajs_raw;
-        msg_desired_trajs_raw.header.stamp = sim_current_time;
-        msg_desired_trajs_raw.trajectories.resize(mission.qn);
-        for(int qi = 0; qi < mission.qn; qi++){
-            msg_desired_trajs_raw.trajectories[qi] = trajToTrajMsg(agents[qi]->getTraj(), qi, param.dt);
-            msg_desired_trajs_raw.trajectories[qi].planner_seq = agents[qi]->getPlannerSeq();
-        }
-        pub_desired_trajs_raw.publish(msg_desired_trajs_raw);
+//        // Raw
+//        dynamic_msgs::TrajectoryArray msg_desired_trajs_raw;
+//        msg_desired_trajs_raw.header.stamp = sim_current_time;
+//        msg_desired_trajs_raw.trajectories.resize(mission.qn);
+//        for(int qi = 0; qi < mission.qn; qi++){
+//            msg_desired_trajs_raw.trajectories[qi] = trajToTrajMsg(agents[qi]->getTraj(), qi, param.dt);
+//            msg_desired_trajs_raw.trajectories[qi].planner_seq = agents[qi]->getPlannerSeq();
+//        }
+//        pub_desired_trajs_raw.publish(msg_desired_trajs_raw);
 
         // Vis
         visualization_msgs::MarkerArray msg_desired_trajs_vis;

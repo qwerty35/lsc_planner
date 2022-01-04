@@ -17,14 +17,14 @@
   ],
 
   "agents": [
-    {"type": "crazyflie", "cid": 2, "start": [-4.5, 1.0, 0.6], "goal": [3.5, -1.0, 0.6]},
-    {"type": "crazyflie", "cid": 3, "start": [-4.5, 0.0, 0.6], "goal": [3.5, 0.0, 0.6]},
-    {"type": "crazyflie", "cid": 4, "start": [-4.5, -1.0, 0.6], "goal": [3.5, 1.0, 0.6]},
-    {"type": "crazyflie", "cid": 5, "start": [-4.5, -2.0, 0.6], "goal": [3.5, -2.0, 0.6]},
-    {"type": "crazyflie", "cid": 7, "start": [3.5, 1.0, 0.6], "goal": [-4.5, -1.0, 0.6]},
-    {"type": "crazyflie", "cid": 8, "start": [3.5, 0.0, 0.6], "goal": [-4.5, 0.0, 0.6]},
-    {"type": "crazyflie", "cid": 9, "start": [3.5, -1.0, 0.6], "goal": [-4.5, 1.0, 0.6]},
-    {"type": "crazyflie", "cid": 10, "start": [3.5, -2.0, 0.6], "goal": [-4.5, -2.0, 0.6]}
+    {"type": "crazyflie", "cid": 1, "start": [-4.5, 1.0, 0.6], "goal": [3.5, -1.0, 0.6]},
+    {"type": "crazyflie", "cid": 2, "start": [-4.5, 0.0, 0.6], "goal": [3.5, 0.0, 0.6]},
+    {"type": "crazyflie", "cid": 3, "start": [-4.5, -1.0, 0.6], "goal": [3.5, 1.0, 0.6]},
+    {"type": "crazyflie", "cid": 4, "start": [-4.5, -2.0, 0.6], "goal": [3.5, -2.0, 0.6]},
+    {"type": "crazyflie", "cid": 5, "start": [3.5, 1.0, 0.6], "goal": [-4.5, -1.0, 0.6]},
+    {"type": "crazyflie", "cid": 6, "start": [3.5, 0.0, 0.6], "goal": [-4.5, 0.0, 0.6]},
+    {"type": "crazyflie", "cid": 7, "start": [3.5, -1.0, 0.6], "goal": [-4.5, 1.0, 0.6]},
+    {"type": "crazyflie", "cid": 8, "start": [3.5, -2.0, 0.6], "goal": [-4.5, -2.0, 0.6]}
   ],
 
   "obstacles": [

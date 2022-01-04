@@ -36,7 +36,7 @@ namespace DynamicPlanning {
         explicit Mission(const ros::NodeHandle &nh);
         static Document parseMissionFile(const std::string& file_name);
         bool loadMission(double max_noise, int world_dimension, double world_z_2d = 1.0, int mission_idx = 0);
-        bool loadMission(const std::string& mission_file_name, double max_noise, int world_dimension, double world_z_2d = 1.0);
+        bool changeMission(const std::string& mission_file_name, double max_noise, int world_dimension, double world_z_2d = 1.0);
         bool readMissionFile(double max_noise, int world_dimension, double world_z_2d);
         void addAgent(const Agent& agent);
         void addObstacle(const std::shared_ptr<ObstacleBase>& obstacle_ptr);

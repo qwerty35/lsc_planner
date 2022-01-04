@@ -4,7 +4,6 @@
 #include <traj_planner.hpp>
 #include <map_manager.hpp>
 #include <cmd_publisher.hpp>
-#include <tf/transform_listener.h>
 
 namespace DynamicPlanning {
     class AgentManager {
@@ -58,7 +57,6 @@ namespace DynamicPlanning {
     private:
         Param param;
         Mission mission;
-        tf::TransformListener tf_listener;
 
         // Flags, states
         PlannerState planner_state;
@@ -73,9 +71,7 @@ namespace DynamicPlanning {
         std::unique_ptr<MapManager> map_manager;
         std::unique_ptr<CmdPublisher> cmd_publisher;
 
-        void stateTransition();
-
-        bool observeCurrentPosition(point3d& observed_position);
+        void planningStateTransition();
     };
 }
 
