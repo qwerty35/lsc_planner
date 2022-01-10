@@ -23,23 +23,31 @@ namespace DynamicPlanning {
         map_manager = std::make_unique<MapManager>(nh, param, mission, agent_id);
 
         // Command publisher
-        cmd_publisher = std::make_unique<CmdPublisher>(nh, param, mission, agent_id);
+        if (param.multisim_experiment) {
+            cmd_publisher = std::make_unique<CmdPublisher>(nh, param, mission, agent_id);
+        }
     }
 
     void AgentManager::doStep(double time_step) {
-        is_disturbed = cmd_publisher->isDisturbed();
-        if(planner_state == PlannerState::LAND and not cmd_publisher->externalPoseUpdate()){
-            // Use previous position
-            agent.current_state.velocity = point3d(0, 0, 0);
-            agent.current_state.acceleration = point3d(0, 0, 0);
+        bool do_step_ideal;
+        if (param.multisim_experiment) {
+            // Check whether the agent is disturbed
+            is_disturbed = cmd_publisher->isDisturbed();
+            if (is_disturbed) {
+                ROS_INFO_STREAM("[AgentManager] agent " << agent.id << " is disturbed");
+                agent.current_state.position = cmd_publisher->getObservedPosition();
+                agent.current_state.velocity = point3d(0, 0, 0);
+                agent.current_state.acceleration = point3d(0, 0, 0);
+                do_step_ideal = false;
+            } else {
+                do_step_ideal = true;
+            }
+        } else {
+            do_step_ideal = true;
         }
-        else if(is_disturbed){
-            agent.current_state.position = cmd_publisher->getObservedPosition();
-            agent.current_state.velocity = point3d(0, 0, 0);
-            agent.current_state.acceleration = point3d(0, 0, 0);
-        }
-        else{
-            // Do step here`
+
+        if (do_step_ideal) {
+            // Update agent's current state with ideal future state
             dynamic_msgs::State ideal_future_state = getFutureStateMsg(time_step);
             agent.current_state.position = pointMsgToPoint3d(ideal_future_state.pose.position);
             agent.current_state.velocity = vector3MsgToPoint3d(ideal_future_state.velocity.linear);
@@ -64,10 +72,9 @@ namespace DynamicPlanning {
             return PlanningReport::WAITFORROSMSG;
         }
 
-        if(planner_state == PlannerState::LAND){
+        if (param.multisim_experiment and planner_state == PlannerState::LAND) {
             cmd_publisher->landingCallback();
-        }
-        else{
+        } else {
             // change desired goal position by the agent's state
             planningStateTransition();
 
@@ -83,7 +90,9 @@ namespace DynamicPlanning {
                                               is_disturbed);
 
             // Update trajectory in Command publisher
-            cmd_publisher->updateTraj(desired_traj, sim_current_time);
+            if(param.multisim_experiment){
+                cmd_publisher->updateTraj(desired_traj, sim_current_time);
+            }
         }
 
         // Re-initialization for replanning
@@ -110,7 +119,7 @@ namespace DynamicPlanning {
     bool AgentManager::isInitialStateValid() {
         bool is_valid;
         point3d observed_position;
-        if (cmd_publisher->externalPoseUpdate()) {
+        if (param.multisim_experiment and cmd_publisher->externalPoseUpdate()) {
             observed_position = cmd_publisher->getObservedPosition();
             double dist = observed_position.distance(agent.current_state.position);
             is_valid = dist < param.reset_threshold;
@@ -140,7 +149,7 @@ namespace DynamicPlanning {
     }
 
     void AgentManager::setPlannerState(const PlannerState &new_planner_state) {
-        if(planner_state == PlannerState::LAND and not cmd_publisher->landingFinished()){
+        if(param.multisim_experiment and planner_state == PlannerState::LAND and not cmd_publisher->landingFinished()){
             return;
         }
 

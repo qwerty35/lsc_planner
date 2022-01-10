@@ -4,7 +4,7 @@ namespace DynamicPlanning {
     CmdPublisher::CmdPublisher(const ros::NodeHandle& _nh, const Param& _param, const Mission& _mission, int _agent_id)
         : nh(_nh), param(_param), mission(_mission), agent_id(_agent_id)
     {
-        nh.param<double>("landing_time", landing_time, 5.0);
+        nh.param<double>("landing_time", landing_time, 3.0);
 
         cmd_timer = nh.createTimer(ros::Duration(0.02), &CmdPublisher::cmdTimerCallback, this);
         pub_cmd = nh.advertise<dynamic_msgs::FullState>("/cf" + std::to_string(mission.agents[agent_id].cid) + "/cmd_full_state", 1);
@@ -118,7 +118,7 @@ namespace DynamicPlanning {
     }
 
     void CmdPublisher::detectDisturbance(dynamic_msgs::State& desired_state){
-        if(not external_pose_update){
+        if(not external_pose_update or landing){
             is_disturbed = false;
             return;
         }
